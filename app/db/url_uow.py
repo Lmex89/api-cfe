@@ -1,6 +1,13 @@
 from common.db.abstract_unit_of_work import AbstractUnitOfWork
 from db.database import DEFAULT_SESSION_FACTORY
-from db.repositories import url_repository as repository
+from db.repositories.billing_period_repository import BillingPeriodRepository
+from db.repositories.daily_consumption_repository import DailyConsumptionRepository
+from db.repositories.household_repository import HouseholdRepository
+from db.repositories.household_tariff_repository import HouseholdTariffRepository
+from db.repositories.tariff_range_repository import TariffRangeRepository
+from db.repositories.tariff_repository import TariffRepository
+from db.repositories.tariff_version_repository import TariffVersionRepository
+from db.repositories.url_repository import UrlRepository
 
 
 
@@ -11,16 +18,16 @@ from db.repositories import url_repository as repository
 ################################################################################
 class UrlShortenerUnitofWork(AbstractUnitOfWork):
 
-    def __enter__(self, session_factory = DEFAULT_SESSION_FACTORY):
+    def __enter__(self, session_factory=DEFAULT_SESSION_FACTORY):
         self.session = session_factory(expire_on_commit=False)
-        self.url_shotner_repository = repository.UrlRepository(self.session)
-        self.household_repository = repository.HouseholdRepository(self.session)
-        self.household_tariff_repository = repository.HouseholdTariffRepository(self.session)
-        self.tariff_repository = repository.TariffRepository(self.session) 
-        self.daily_consumption_repository = repository.DailyConsumptionRepository(self.session)
-        self.billing_period_repository = repository.BillingPeriodRepository(self.session)
-        self.tariff_range_repository = repository.TariffRangeRepository(self.session)
-        self.tariff_version_repository = repository.TariffVersionRepository(self.session)
+        self.url_shotner_repository = UrlRepository(self.session)
+        self.household_repository = HouseholdRepository(self.session)
+        self.household_tariff_repository = HouseholdTariffRepository(self.session)
+        self.tariff_repository = TariffRepository(self.session)
+        self.daily_consumption_repository = DailyConsumptionRepository(self.session)
+        self.billing_period_repository = BillingPeriodRepository(self.session)
+        self.tariff_range_repository = TariffRangeRepository(self.session)
+        self.tariff_version_repository = TariffVersionRepository(self.session)
         return self
 
     def __exit__(self, *args):
