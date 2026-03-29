@@ -1,5 +1,6 @@
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -17,9 +18,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import registry
 
 from model.domain.billing_period_model import BillingPeriod
-from model.domain.daily_consumption_model import DailyConsumption
 from model.domain.household_model import Household
 from model.domain.household_tariff_model import HouseholdTariff
+from model.domain.meter_reading_model import MeterReading
 from model.domain.tariff_model import Tariff
 from model.domain.tariff_range_model import TariffRange
 from model.domain.tariff_version_model import TariffVersion
@@ -84,16 +85,16 @@ billing_periods_table = Table(
     Index("idx_household_period", "household_id", "start_date", "end_date"),
 )
 
-daily_consumption_table = Table(
-    "daily_consumption",
+meter_readings_table = Table(
+    "meter_readings",
     metadata,
     Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("household_id", BigInteger, ForeignKey("households.id"), nullable=False),
-    Column("consumption_date", Date, nullable=False),
-    Column("kwh", Numeric(10, 3), nullable=False),
+    Column("reading_date", Date, nullable=False),
+    Column("reading_kwh", Numeric(12, 3), nullable=False),
+    Column("is_initial", Boolean, nullable=False, server_default="0"),
     Column("created_at", DateTime, nullable=True, server_default=func.current_timestamp()),
-    UniqueConstraint("household_id", "consumption_date", name="uniq_household_date"),
-    Index("idx_household_date", "household_id", "consumption_date"),
+    UniqueConstraint("household_id", "reading_date", name="uniq_household_date"),
 )
 
 tariff_versions_table = Table(
@@ -209,14 +210,15 @@ def start_mappers():
     )
 
     mapper_registry.map_imperatively(
-        DailyConsumption,
-        daily_consumption_table,
+        MeterReading,
+        meter_readings_table,
         properties={
-            "id": daily_consumption_table.c.id,
-            "household_id": daily_consumption_table.c.household_id,
-            "consumption_date": daily_consumption_table.c.consumption_date,
-            "kwh": daily_consumption_table.c.kwh,
-            "created_at": daily_consumption_table.c.created_at,
+            "id": meter_readings_table.c.id,
+            "household_id": meter_readings_table.c.household_id,
+            "reading_date": meter_readings_table.c.reading_date,
+            "reading_kwh": meter_readings_table.c.reading_kwh,
+            "is_initial": meter_readings_table.c.is_initial,
+            "created_at": meter_readings_table.c.created_at,
         },
     )
 

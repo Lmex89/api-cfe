@@ -5,9 +5,10 @@ from typing import Optional
 
 
 @dataclass
-class DailyConsumption:
+class MeterReading:
     household_id: int
-    consumption_date: date
-    kwh: Decimal
+    reading_date: date
+    reading_kwh: Decimal
+    is_initial: bool = False
     id: Optional[int] = None
     created_at: Optional[datetime] = None

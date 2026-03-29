@@ -8,7 +8,6 @@ from model.errors import EntityNotFoundException, http420_error_handler
 from routes.api import api_router
 from common.config import ALLOWED_HOSTS, API_PREFIX, DEBUG
 from db import orm
-from db.database import init_db
 
 
 def get_application() -> FastAPI:
