@@ -3,7 +3,7 @@ from typing import List
 from fastapi import HTTPException
 from starlette.status import HTTP_404_NOT_FOUND
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.domain.household_model import Household
 from model.household_serializers import (
     HouseholdCreate,
@@ -13,7 +13,7 @@ from model.household_serializers import (
 
 
 def create_household(payload: HouseholdCreate) -> HouseholdResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = Household(**payload.model_dump())
         uow.household_repository.add(item)
         uow.commit()
@@ -21,7 +21,7 @@ def create_household(payload: HouseholdCreate) -> HouseholdResponse:
 
 
 def get_household(household_id: int) -> HouseholdResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.household_repository.get(household_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Household not found")
@@ -29,13 +29,13 @@ def get_household(household_id: int) -> HouseholdResponse:
 
 
 def list_households(limit: int = 100, offset: int = 0) -> List[HouseholdResponse]:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         records = uow.household_repository.list(limit=limit, offset=offset)
         return [HouseholdResponse.model_validate(item) for item in records]
 
 
 def update_household(household_id: int, payload: HouseholdUpdate) -> HouseholdResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.household_repository.get(household_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Household not found")
@@ -49,7 +49,7 @@ def update_household(household_id: int, payload: HouseholdUpdate) -> HouseholdRe
 
 
 def delete_household(household_id: int) -> None:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.household_repository.get(household_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Household not found")

@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from starlette.status import HTTP_404_NOT_FOUND
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.domain.tariff_range_model import TariffRange
 from model.tariff_range_serializers import (
     TariffRangeCreate,
@@ -13,7 +13,7 @@ from model.tariff_range_serializers import (
 
 
 def create_tariff_range(payload: TariffRangeCreate) -> TariffRangeResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = TariffRange(**payload.model_dump())
         uow.tariff_range_repository.add(item)
         uow.commit()
@@ -21,7 +21,7 @@ def create_tariff_range(payload: TariffRangeCreate) -> TariffRangeResponse:
 
 
 def get_tariff_range(tariff_range_id: int) -> TariffRangeResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_range_repository.get(tariff_range_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff range not found")
@@ -33,7 +33,7 @@ def list_tariff_ranges(
     limit: int = 100,
     offset: int = 0,
 ) -> List[TariffRangeResponse]:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         records = uow.tariff_range_repository.list(
             tariff_version_id=tariff_version_id,
             limit=limit,
@@ -45,7 +45,7 @@ def list_tariff_ranges(
 def update_tariff_range(
     tariff_range_id: int, payload: TariffRangeUpdate
 ) -> TariffRangeResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_range_repository.get(tariff_range_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff range not found")
@@ -59,7 +59,7 @@ def update_tariff_range(
 
 
 def delete_tariff_range(tariff_range_id: int) -> None:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_range_repository.get(tariff_range_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff range not found")

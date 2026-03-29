@@ -1,11 +1,11 @@
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from services.classes.abstract.uniqueness import UniquenessChecker
 
 
 class DatabaseUniquenessChecker(UniquenessChecker):
     """Checks for short code uniqueness using the database."""
 
-    def __init__(self, uow: UrlShortenerUnitofWork):
+    def __init__(self, uow: TariffConsumptionUnitofWork):
         self.uow = uow
 
     def is_unique(self, short_code: str) -> bool:

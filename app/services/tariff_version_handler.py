@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.domain.tariff_version_model import TariffVersion
 from model.tariff_version_serializers import (
     TariffVersionCreate,
@@ -13,7 +13,7 @@ from model.tariff_version_serializers import (
 
 
 def create_tariff_version(payload: TariffVersionCreate) -> TariffVersionResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         existing = uow.tariff_version_repository.get_by_tariff_and_start_date(
             tariff_id=payload.tariff_id,
             start_date=payload.start_date,
@@ -31,7 +31,7 @@ def create_tariff_version(payload: TariffVersionCreate) -> TariffVersionResponse
 
 
 def get_tariff_version(tariff_version_id: int) -> TariffVersionResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_version_repository.get(tariff_version_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff version not found")
@@ -43,7 +43,7 @@ def list_tariff_versions(
     limit: int = 100,
     offset: int = 0,
 ) -> List[TariffVersionResponse]:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         records = uow.tariff_version_repository.list(
             tariff_id=tariff_id,
             limit=limit,
@@ -55,7 +55,7 @@ def list_tariff_versions(
 def update_tariff_version(
     tariff_version_id: int, payload: TariffVersionUpdate
 ) -> TariffVersionResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_version_repository.get(tariff_version_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff version not found")
@@ -81,7 +81,7 @@ def update_tariff_version(
 
 
 def delete_tariff_version(tariff_version_id: int) -> None:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_version_repository.get(tariff_version_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff version not found")

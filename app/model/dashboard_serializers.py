@@ -14,8 +14,12 @@ class BillingPeriodCostResponse(BaseModel):
     total_consumption_kwh: float
     average_daily_kwh: float
     tariff_code: str
-    total_cost: float
+    total_cost_witout_taxes: float
     cost_per_kwh: float
+    iva: float 
+    total_cost_with_iva: float
+    dap: float
+    total_cost: float
 
 
 class ActiveTariffResponse(BaseModel):
@@ -33,6 +37,8 @@ class ActiveTariffVersionResponse(BaseModel):
 class TariffCostCalculationResponse(BaseModel):
     total_cost: Decimal
     tariff_version: ActiveTariffVersionResponse
+    dap: Decimal = Decimal("0")
+    iva: Decimal = Decimal("0")
 
 
 class HouseholdResponse(BaseModel):

@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.domain.meter_reading_model import MeterReading
 from model.meter_reading_serializers import (
     MeterReadingCreate,
@@ -14,7 +14,7 @@ from model.meter_reading_serializers import (
 
 
 def create_meter_reading(payload: MeterReadingCreate) -> MeterReadingResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         existing = uow.meter_reading_repository.get_by_household_and_date(
             household_id=payload.household_id,
             reading_date=payload.reading_date,
@@ -37,7 +37,7 @@ def create_meter_reading(payload: MeterReadingCreate) -> MeterReadingResponse:
 
 
 def get_meter_reading(meter_reading_id: int) -> MeterReadingResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         meter_reading = uow.meter_reading_repository.get(meter_reading_id)
         if not meter_reading:
             raise HTTPException(
@@ -54,7 +54,7 @@ def list_meter_readings(
     limit: int = 100,
     offset: int = 0,
 ) -> List[MeterReadingResponse]:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         records = uow.meter_reading_repository.list(
             household_id=household_id,
             reading_date_from=reading_date_from,
@@ -68,7 +68,7 @@ def list_meter_readings(
 def update_meter_reading(
     meter_reading_id: int, payload: MeterReadingUpdate
 ) -> MeterReadingResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         meter_reading = uow.meter_reading_repository.get(meter_reading_id)
         if not meter_reading:
             raise HTTPException(
@@ -86,7 +86,7 @@ def update_meter_reading(
 
 
 def delete_meter_reading(meter_reading_id: int) -> None:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         meter_reading = uow.meter_reading_repository.get(meter_reading_id)
         if not meter_reading:
             raise HTTPException(

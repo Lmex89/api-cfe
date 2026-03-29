@@ -9,7 +9,7 @@ from routes import tariffs
 from routes import tariff_ranges
 from routes import tariff_versions
 
-api_router = APIRouter()
+api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(meter_readings.router)
 api_router.include_router(households.router)
 api_router.include_router(billing_periods.router)

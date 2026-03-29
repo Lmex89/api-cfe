@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from loguru import logger
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUEST
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.domain.url_model import UrlModel
 from model.serializers import URL, ShortURLResponse, URLCreate, URLDelete
 from services.classes.short_code.expiration_service import ExpirationService
@@ -44,7 +44,7 @@ def create_short_url(
     # Set expiration time to 30 days from now
 
     code_generator = ShortCodeGenerator(length=7)
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         uniqueness_checker = DatabaseUniquenessChecker(uow=uow)
         short_code = generate_unique_short_code(
             generator=code_generator, checker=uniqueness_checker
@@ -71,7 +71,7 @@ def create_short_url(
 def get_original_url_by_short_code(short_code: str) -> URL | None:
     """Retrieves the URL entry based on the short code."""
 
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         db_url = uow.url_shotner_repository.get_by_short_code(short_code=short_code)
         logger.debug(f"Getting url from {db_url}")
 
@@ -100,7 +100,7 @@ def get_original_url_by_short_code(short_code: str) -> URL | None:
 
 
 def delete_expired_ulrs():
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         urls_db = uow.url_shotner_repository.get_all_url_expired()
         count = len(urls_db)
         logger.debug(f"getting urls for delete count {count}")

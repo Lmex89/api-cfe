@@ -3,13 +3,13 @@ from typing import List
 from fastapi import HTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.domain.tariff_model import Tariff
 from model.tariff_serializers import TariffCreate, TariffResponse, TariffUpdate
 
 
 def create_tariff(payload: TariffCreate) -> TariffResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         existing = uow.tariff_repository.get_by_code(payload.code)
         if existing:
             raise HTTPException(
@@ -23,7 +23,7 @@ def create_tariff(payload: TariffCreate) -> TariffResponse:
 
 
 def get_tariff(tariff_id: int) -> TariffResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_repository.get(tariff_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff not found")
@@ -31,13 +31,13 @@ def get_tariff(tariff_id: int) -> TariffResponse:
 
 
 def list_tariffs(limit: int = 100, offset: int = 0) -> List[TariffResponse]:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         records = uow.tariff_repository.list(limit=limit, offset=offset)
         return [TariffResponse.model_validate(item) for item in records]
 
 
 def update_tariff(tariff_id: int, payload: TariffUpdate) -> TariffResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_repository.get(tariff_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff not found")
@@ -59,7 +59,7 @@ def update_tariff(tariff_id: int, payload: TariffUpdate) -> TariffResponse:
 
 
 def delete_tariff(tariff_id: int) -> None:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.tariff_repository.get(tariff_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff not found")

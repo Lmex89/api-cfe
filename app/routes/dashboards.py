@@ -4,7 +4,7 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     BillingPeriodCostResponse,
     HouseholdConsumptionDashboardResponse,
@@ -24,7 +24,7 @@ def get_billing_period_dashboard(
     billing_period_id: int,
 ) -> BillingPeriodCostResponse:
     """Get complete billing calculation for a period (consumption + cost)."""
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         service = BillingService(uow)
         try:
             return service.calculate_billing_period_cost(billing_period_id)
@@ -48,7 +48,7 @@ def get_household_consumption(
             detail="start_date must be before end_date",
         )
 
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         service = BillingService(uow)
         try:
             return service.get_household_consumption_dashboard(
@@ -74,7 +74,7 @@ def get_household_billing_summary(
             detail="start_date must be before end_date",
         )
 
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         service = BillingService(uow)
         try:
             return service.get_multiple_periods_summary(

@@ -2,9 +2,9 @@
 
 from datetime import date
 from decimal import Decimal
-
+from loguru import logger 
 from common.api.errors.business_error import TariffCalculationError
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     ActiveTariffVersionResponse,
     TariffCostCalculationResponse,
@@ -18,7 +18,7 @@ class RangeBasedTariffCalculator:
     Sole Purpose: Calculate cost using tiered tariff ranges.
     """
 
-    def __init__(self, uow: UrlShortenerUnitofWork):
+    def __init__(self, uow: TariffConsumptionUnitofWork):
         self.uow = uow
 
     def calculate_cost(
@@ -34,6 +34,7 @@ class RangeBasedTariffCalculator:
           - 100-300 kWh: $0.15/kWh
           - >300 kWh: $0.20/kWh
         """
+
         tariff_version = self._get_active_tariff_version(tariff_id, effective_date)
         if not tariff_version:
             raise TariffCalculationError(
@@ -70,9 +71,15 @@ class RangeBasedTariffCalculator:
 
             remaining_kwh -= consumption_in_range
 
+        iva = total_cost * Decimal("0.16")  # Example IVA calculation (16%)
+        dap = total_cost * Decimal("0.05")  # Example DAP calculation (5%)
+        logger.info(f"Calculated cost: {total_cost}, IVA: {iva}, DAP: {dap}")
+
         return TariffCostCalculationResponse(
             total_cost=total_cost,
             tariff_version=tariff_version,
+            iva=iva,
+            dap=dap,
         )
 
     def _get_active_tariff_version(

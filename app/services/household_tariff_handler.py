@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from starlette.status import HTTP_404_NOT_FOUND
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.domain.household_tariff_model import HouseholdTariff
 from model.household_tariff_serializers import (
     HouseholdTariffCreate,
@@ -13,7 +13,7 @@ from model.household_tariff_serializers import (
 
 
 def create_household_tariff(payload: HouseholdTariffCreate) -> HouseholdTariffResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = HouseholdTariff(**payload.model_dump())
         uow.household_tariff_repository.add(item)
         uow.commit()
@@ -21,7 +21,7 @@ def create_household_tariff(payload: HouseholdTariffCreate) -> HouseholdTariffRe
 
 
 def get_household_tariff(household_tariff_id: int) -> HouseholdTariffResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.household_tariff_repository.get(household_tariff_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Household tariff not found")
@@ -34,7 +34,7 @@ def list_household_tariffs(
     limit: int = 100,
     offset: int = 0,
 ) -> List[HouseholdTariffResponse]:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         records = uow.household_tariff_repository.list(
             household_id=household_id,
             tariff_id=tariff_id,
@@ -47,7 +47,7 @@ def list_household_tariffs(
 def update_household_tariff(
     household_tariff_id: int, payload: HouseholdTariffUpdate
 ) -> HouseholdTariffResponse:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.household_tariff_repository.get(household_tariff_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Household tariff not found")
@@ -61,7 +61,7 @@ def update_household_tariff(
 
 
 def delete_household_tariff(household_tariff_id: int) -> None:
-    with UrlShortenerUnitofWork() as uow:
+    with TariffConsumptionUnitofWork() as uow:
         item = uow.household_tariff_repository.get(household_tariff_id)
         if not item:
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Household tariff not found")

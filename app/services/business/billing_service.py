@@ -4,7 +4,7 @@ from datetime import date
 from typing import Optional
 
 from common.api.errors.business_error import TariffCalculationError
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     ActiveTariffResponse,
     BillingPeriodCostResponse,
@@ -18,6 +18,7 @@ from services.business import MeterReadingConsumptionCalculator
 from services.business.tariff_calculator import RangeBasedTariffCalculator
 
 from starlette import status
+from model.domain.billing_period_model import BillingPeriod
 
 
 class BillingServiceError(Exception):
@@ -37,7 +38,7 @@ class BillingService:
 
     def __init__(
         self,
-        uow: UrlShortenerUnitofWork,
+        uow: TariffConsumptionUnitofWork,
         consumption_calc: Optional[MeterReadingConsumptionCalculator] = None,
         tariff_calc: Optional[RangeBasedTariffCalculator] = None,
     ):
@@ -51,7 +52,7 @@ class BillingService:
         self, billing_period_id: int
     ) -> BillingPeriodCostResponse:
         """Calculate total cost for a billing period (for dashboards)."""
-        bp = self.uow.billing_period_repository.get(billing_period_id)
+        bp: BillingPeriod = self.uow.billing_period_repository.get(billing_period_id)
         if not bp:
             raise BillingServiceError(
                 "Billing period not found", status.HTTP_422_UNPROCESSABLE_CONTENT
@@ -65,7 +66,10 @@ class BillingService:
 
         active_tariff = self._get_active_tariff(bp.household_id, bp.start_date)
         if not active_tariff:
-            raise BillingServiceError("No active tariff for this period", 422)
+            raise BillingServiceError(
+                "No active tariff for this period",
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            )
 
         consumption = self.consumption_calc.calculate_total(
             bp.household_id, bp.start_date, bp.end_date
@@ -91,7 +95,11 @@ class BillingService:
             total_consumption_kwh=float(consumption),
             average_daily_kwh=float(avg_daily),
             tariff_code=active_tariff.code,
-            total_cost=float(cost),
+            total_cost_witout_taxes=float(cost),
+            iva=float(cost_result.iva),
+            total_cost_with_iva=float(cost_result.iva + cost),
+            dap=float(cost_result.dap),
+            total_cost=float(cost_result.iva + cost + cost_result.dap),
             cost_per_kwh=float(cost / consumption) if consumption > 0 else 0,
         )
 
@@ -143,7 +151,7 @@ class BillingService:
                 "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
             )
 
-        periods = self.uow.billing_period_repository.list(
+        periods: list[BillingPeriod] = self.uow.billing_period_repository.list(
             household_id=household_id, limit=1000
         )
 

@@ -16,7 +16,7 @@ from db.repositories.url_repository import UrlRepository
 ### manejar un conjunto de repositorios. Siempre se debe de acceder a los
 ### repositorios por medio de un agregado, aunque solo sea uno
 ################################################################################
-class UrlShortenerUnitofWork(AbstractUnitOfWork):
+class TariffConsumptionUnitofWork(AbstractUnitOfWork):
 
     def __enter__(self, session_factory=DEFAULT_SESSION_FACTORY):
         self.session = session_factory(expire_on_commit=False)

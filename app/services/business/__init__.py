@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Dict, List
 
-from db.url_uow import UrlShortenerUnitofWork
+from db.uow import TariffConsumptionUnitofWork
 
 
 class MeterReadingConsumptionCalculator:
@@ -13,7 +13,7 @@ class MeterReadingConsumptionCalculator:
     Sole Purpose: Calculate consumption from meter readings only.
     """
 
-    def __init__(self, uow: UrlShortenerUnitofWork):
+    def __init__(self, uow: TariffConsumptionUnitofWork):
         self.uow = uow
 
     def calculate_total(
@@ -25,21 +25,24 @@ class MeterReadingConsumptionCalculator:
         """
         Total consumption = final_reading_kwh - initial_reading_kwh
         """
-        readings = self.uow.meter_reading_repository.list(
+        first_reading = self.uow.meter_reading_repository.get_first_reading_in_range(
             household_id=household_id,
             reading_date_from=start_date,
             reading_date_to=end_date,
-            limit=1000,
+        )
+        last_reading = self.uow.meter_reading_repository.get_last_reading_in_range(
+            household_id=household_id,
+            reading_date_from=start_date,
+            reading_date_to=end_date,
         )
 
-        if not readings or len(readings) < 2:
+        if not first_reading or not last_reading:
             return Decimal("0")
 
-        sorted_readings = sorted(readings, key=lambda r: r.reading_date)
-        first_reading = sorted_readings[0].reading_kwh
-        last_reading = sorted_readings[-1].reading_kwh
+        if first_reading.id == last_reading.id:
+            return Decimal("0")
 
-        return last_reading - first_reading
+        return last_reading.reading_kwh - first_reading.reading_kwh
 
     def calculate_average_daily(
         self,

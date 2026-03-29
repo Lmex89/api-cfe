@@ -40,12 +40,68 @@ class MeterReadingRepository(BaseRepository):
             .all()
         )
 
+    def get_last_reading_for_household(self, household_id: int) -> Optional[MeterReading]:
+        return (
+            self.session.query(MeterReading)
+            .filter_by(household_id=household_id)
+            .order_by(MeterReading.reading_date.desc(), MeterReading.id.desc())
+            .first()
+        )
+
     def get_by_household_and_date(
         self, household_id: int, reading_date: date
     ) -> Optional[MeterReading]:
         return (
             self.session.query(MeterReading)
             .filter_by(household_id=household_id, reading_date=reading_date)
+            .first()
+        )
+
+    def get_first_reading_in_range(
+        self,
+        household_id: int,
+        reading_date_from: date,
+        reading_date_to: date,
+    ) -> Optional[MeterReading]:
+        return self._get_reading_in_range(
+            household_id=household_id,
+            reading_date_from=reading_date_from,
+            reading_date_to=reading_date_to,
+            descending=False,
+        )
+
+    def get_last_reading_in_range(
+        self,
+        household_id: int,
+        reading_date_from: date,
+        reading_date_to: date,
+    ) -> Optional[MeterReading]:
+        return self._get_reading_in_range(
+            household_id=household_id,
+            reading_date_from=reading_date_from,
+            reading_date_to=reading_date_to,
+            descending=True,
+        )
+
+    def _get_reading_in_range(
+        self,
+        household_id: int,
+        reading_date_from: date,
+        reading_date_to: date,
+        descending: bool,
+    ) -> Optional[MeterReading]:
+        order_by = (
+            (MeterReading.reading_date.desc(), MeterReading.id.desc())
+            if descending
+            else (MeterReading.reading_date.asc(), MeterReading.id.asc())
+        )
+
+        return (
+            self.session.query(MeterReading)
+            .filter(MeterReading.household_id == household_id)
+            .filter(MeterReading.reading_date >= reading_date_from)
+            .filter(MeterReading.reading_date <= reading_date_to)
+            .order_by(*order_by)
             .first()
         )
 
