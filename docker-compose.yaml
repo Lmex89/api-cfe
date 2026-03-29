@@ -1,0 +1,13 @@
+# test
+services:
+  api:
+    build: .
+    ports:
+      - "9000:9000"
+    environment:
+      - HOST_URL=${API_HOST}
+      - CREATE_API_KEY=${CREATE_API_KEY}
+      - DELETE_API_KEY=${DELETE_API_KEY}
+    volumes:
+      - .:/app
+      - ${SERVER_DATABASE_PATH}:/app/database.db

@@ -1,0 +1,10 @@
+starlette
+pydantic
+SQLAlchemy
+loguru
+fastapi
+uvicorn
+mysqlclient
+requests 
+python-dotenv
+uvicorn

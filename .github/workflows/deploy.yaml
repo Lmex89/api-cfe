@@ -1,0 +1,39 @@
+# .github/workflows/deploy.yml
+name: Deploy FastAPI to Home Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: self-hosted
+
+    # This 'env' block securely loads your secrets into the runner's shell environment
+    env:
+      API_HOST: ${{ secrets.API_HOST }}
+      SERVER_DATABASE_PATH: ${{ secrets.SERVER_DATABASE_PATH }}
+      CREATE_API_KEY : ${{secrets.CREATE_API_KEY}}
+      DELETE_API_KEY : ${{secrets.DELETE_API_KEY}}
+
+    steps:
+      - name: 1. Checkout main branch
+        uses: actions/checkout@v4
+
+      - name: 2. Deploy with Docker Compose
+        run: |
+          echo "🚀 Deploying FastAPI service..."
+          cd $GITHUB_WORKSPACE
+          echo "🚀 Deploying FastAPI service..."
+
+          # docker-compose automatically finds API_HOST and DB_HOST_PATH in the shell
+          # and uses them to substitute the ${...} variables in the docker-compose.yml file.
+          docker compose build --no-cache
+          docker compose up -d
+          
+          echo "🧹 Pruning old Docker images..."
+          docker image prune -f
+
+          echo "✅ Deployment complete!"
