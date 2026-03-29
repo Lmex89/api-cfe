@@ -5,7 +5,6 @@ from typing import Optional
 
 @dataclass
 class Household:
-    tariff_code: str
     name: Optional[str] = None
     id: Optional[int] = None
     created_at: Optional[datetime] = None

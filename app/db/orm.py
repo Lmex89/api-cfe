@@ -40,7 +40,6 @@ households_table = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("name", String(100), nullable=True),
-    Column("tariff_code", String(10), nullable=False),
     Column("created_at", DateTime, nullable=True, server_default=func.current_timestamp()),
     Column(
         "updated_at",
@@ -154,17 +153,7 @@ household_tariffs_table = Table(
     Index("idx_ht_lookup", "household_id", "start_date", "end_date"),
 )
 
-urls_table = Table(
-    "urls",
-    metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("short_code", String(10), nullable=False, unique=True, index=True),
-    Column("original_url", Text, nullable=False),
-    Column("created_at", DateTime, nullable=False, server_default=func.now()),
-    Column("expires_at", DateTime, nullable=True),
-    Column("visits", Integer, nullable=False, server_default="0"),
-    Column("active", Integer, nullable=False, server_default="1"),
-)
+
 
 
 ################################################################################
@@ -178,7 +167,6 @@ def start_mappers():
         properties={
             "id": households_table.c.id,
             "name": households_table.c.name,
-            "tariff_code": households_table.c.tariff_code,
             "created_at": households_table.c.created_at,
             "updated_at": households_table.c.updated_at,
         },
@@ -260,19 +248,5 @@ def start_mappers():
             "end_date": household_tariffs_table.c.end_date,
             "created_at": household_tariffs_table.c.created_at,
             "updated_at": household_tariffs_table.c.updated_at,
-        },
-    )
-
-    mapper_registry.map_imperatively(
-        UrlModel,
-        urls_table,
-        properties={
-            "id": urls_table.c.id,
-            "short_code": urls_table.c.short_code,
-            "original_url": urls_table.c.original_url,
-            "created_at": urls_table.c.created_at,
-            "expires_at": urls_table.c.expires_at,
-            "visits": urls_table.c.visits,
-            "active": urls_table.c.active,
         },
     )
