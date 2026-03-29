@@ -16,20 +16,5 @@ class UrlRepository(BaseRepository):
     def get(self, id: int) -> Any:
         return self.session.query(UrlModel).filter_by(id=id).first()
 
-    def get_by_short_code(self, short_code: str) -> Optional[UrlModel]:
-        return (
-            self.session.query(UrlModel)
-            .filter(UrlModel.short_code == short_code, UrlModel.active == 1)
-            .first()
-        )
-
-    def get_all_url_expired(self) -> List[UrlModel]:
-        return (
-            self.session.query(UrlModel)
-            .filter(UrlModel.active == 1, UrlModel.expires_at < datetime.now())
-            .all()
-        )
-
-
     def add(self, base_model):
         self.session.add(base_model)

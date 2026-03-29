@@ -1,23 +1,17 @@
-# model/domain/base_model.py
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
 
+@dataclass
 class UrlModel:
-    def __init__(
-        self,
-        original_url: str,
-        expires_at: datetime,
-        short_code: str,
-        visits: Optional[int] = 0,
-    ):
-        self.id: int
-        self.short_code: str = short_code
-        self.original_url: str = original_url
-        self.created_at: datetime = datetime.now()
-        self.expires_at: datetime = expires_at
-        self.visits: int = visits
-        self.active: int = 1
+    original_url: str
+    expires_at: datetime
+    short_code: str
+    visits: Optional[int] = 0
+    id: Optional[int] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    active: int = 1
 
     def dump(self):
         return self.__dict__
