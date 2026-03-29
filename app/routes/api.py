@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from routes import billing_periods
+from routes import dashboards
 from routes import households
 from routes import household_tariffs
 from routes import meter_readings
@@ -16,3 +17,4 @@ api_router.include_router(household_tariffs.router)
 api_router.include_router(tariffs.router)
 api_router.include_router(tariff_versions.router)
 api_router.include_router(tariff_ranges.router)
+api_router.include_router(dashboards.router)
