@@ -14,7 +14,7 @@ WORKDIR /build
 COPY app/requirements.pip ./requirements.pip
 
 RUN pip install --upgrade pip setuptools wheel && \
-    pip wheel --disable-pip-version-check --no-cache-dir --no-compile \
+    pip wheel --disable-pip-version-check --no-cache-dir \
         --wheel-dir /wheels \
         -r requirements.pip
 
