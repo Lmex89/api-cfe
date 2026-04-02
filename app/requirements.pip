@@ -5,6 +5,5 @@ loguru
 fastapi
 uvicorn
 mysqlclient
-requests 
+requests
 python-dotenv
-uvicorn
