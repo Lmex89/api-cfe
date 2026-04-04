@@ -1,45 +1,43 @@
-FROM python:3.12.9-slim-bookworm AS builder
+FROM python:3.12-alpine AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        default-libmysqlclient-dev \
-        pkg-config && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+        build-base \
+        mariadb-connector-c-dev \
+        pkgconfig
 
 WORKDIR /build
 
 COPY app/requirements.pip ./requirements.pip
 
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install --prefix=/install -r requirements.pip
+    pip wheel --disable-pip-version-check --no-cache-dir \
+        --wheel-dir /wheels \
+        -r requirements.pip
 
-FROM python:3.12.9-slim-bookworm
+FROM python:3.12-alpine
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        locales \
-        mariadb-client \
-        libmariadb3 && \
-    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    sed -i -e 's/# es_MX.UTF-8 UTF-8/es_MX.UTF-8 UTF-8/' /etc/locale.gen && \
-    locale-gen && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache mariadb-connector-c
 
-RUN useradd --create-home --shell /bin/bash appuser
+RUN adduser -D -s /sbin/nologin appuser
 
 WORKDIR /home/appuser/app
 
-COPY --from=builder /install /usr/local
+COPY --from=builder /wheels /wheels
+COPY app/requirements.pip /tmp/requirements.pip
+
+RUN pip install --no-cache-dir --no-compile --no-index \
+    --find-links=/wheels -r /tmp/requirements.pip && \
+    rm -rf /wheels /tmp/requirements.pip
+
 COPY --chown=appuser:appuser app/ /home/appuser/app/
 
 USER appuser
