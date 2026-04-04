@@ -14,7 +14,7 @@ services:
       DB_NAME: ${DB_NAME:-cfe}
       SECRET_KEY: ${SECRET_KEY:-change-me}
       LOGGING_LEVEL: ${LOGGING_LEVEL:-DEBUG}
-
+    restart: unless-stopped
     networks:
       - db-test-net
 
