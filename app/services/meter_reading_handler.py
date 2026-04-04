@@ -144,6 +144,24 @@ def update_meter_reading(
             )
 
         update_data = payload.model_dump(exclude_unset=True)
+        new_reading_date = update_data.get("reading_date")
+        if new_reading_date is not None and new_reading_date != meter_reading.reading_date:
+            existing = uow.meter_reading_repository.get_by_household_and_date(
+                household_id=meter_reading.household_id,
+                reading_date=new_reading_date,
+            )
+            if existing and existing.id != meter_reading.id:
+                log.warning(
+                    "Update rejected for meter_reading_id={} because household_id={} already has a reading on {}",
+                    meter_reading_id,
+                    meter_reading.household_id,
+                    new_reading_date,
+                )
+                raise HTTPException(
+                    status_code=HTTP_409_CONFLICT,
+                    detail="A meter reading for this household and date already exists",
+                )
+
         log.debug(
             "Applying update to meter_reading_id={} with fields={}",
             meter_reading_id,
