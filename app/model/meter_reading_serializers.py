@@ -17,6 +17,7 @@ class MeterReadingCreate(MeterReadingBase):
 
 
 class MeterReadingUpdate(BaseModel):
+    reading_date: Optional[date] = None
     reading_kwh: Optional[Decimal] = Field(default=None, gt=0)
     is_initial: Optional[bool] = None
 
