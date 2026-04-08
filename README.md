@@ -166,5 +166,5 @@ Each router is registered through `app/routes/api.py`.
 ## Notes
 
 - The current auth store is in memory, so users are reset when the app restarts.
-- JWTs expire after 15 minutes.
+- JWTs expire after 12 hours.
 - `bcrypt==4.0.1` is pinned because newer bcrypt versions are not compatible with `passlib 1.7.4` in this project.

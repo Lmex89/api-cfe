@@ -2,8 +2,9 @@
 
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from common.services.auth_dependency import get_current_user
 from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     BillingPeriodCostResponse,
@@ -12,7 +13,11 @@ from model.dashboard_serializers import (
 )
 from services.business.billing_service import BillingService, BillingServiceError
 
-router = APIRouter(prefix="/dashboards", tags=["dashboards"])
+router = APIRouter(
+    prefix="/dashboards",
+    tags=["dashboards"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get(
