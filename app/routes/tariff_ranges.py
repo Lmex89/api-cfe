@@ -1,8 +1,9 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from common.api.responses import responses as HTTP_RESPONSES
+from common.services.auth_dependency import get_current_user
 from model.tariff_range_serializers import (
     TariffRangeCreate,
     TariffRangeDeleteResponse,
@@ -11,7 +12,12 @@ from model.tariff_range_serializers import (
 )
 from services import tariff_range_handler
 
-router = APIRouter(prefix="/tariff-ranges", tags=["tariff-ranges"], responses=HTTP_RESPONSES)
+router = APIRouter(
+    prefix="/tariff-ranges",
+    tags=["tariff-ranges"],
+    responses=HTTP_RESPONSES,
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("", response_model=TariffRangeResponse, status_code=status.HTTP_201_CREATED)
