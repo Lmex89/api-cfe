@@ -63,14 +63,23 @@ class BillingService:
             f"Calculating billing period cost for billing_period_id={billing_period_id}"
         )
         bp: BillingPeriod = self.uow.billing_period_repository.get(billing_period_id)
+        logger.debug(
+            f"Fetched billing period: billing_period_id={billing_period_id}, "
+            f"household_id={bp.household_id if bp else 'N/A'}, "
+            f"start_date={bp.start_date if bp else 'N/A'}, end_date={bp.end_date if bp else 'N/A'}"
+        )
         if not bp:
-            logger.debug(f"Billing period not found: billing_period_id={billing_period_id}")
+            logger.debug(
+                f"Billing period not found: billing_period_id={billing_period_id}"
+            )
             raise BillingServiceError(
                 "Billing period not found", status.HTTP_422_UNPROCESSABLE_CONTENT
             )
 
         household = self.uow.household_repository.get(bp.household_id)
-        logger.debug(f"Fetched household for billing period: billing_period_id={billing_period_id}, household_id={bp.household_id}")    
+        logger.debug(
+            f"Fetched household for billing period: billing_period_id={billing_period_id}, household_id={bp.household_id}"
+        )
         if not household:
             logger.debug(f"Household not found: household_id={bp.household_id}")
             raise BillingServiceError(
@@ -280,9 +289,7 @@ class BillingService:
                     f"Active tariff found: household_id={household_id}, tariff_id={ht.tariff_id}, code={tariff.code}, "
                     f"year={target_year}, month={target_month}"
                 )
-                return ActiveTariffResponse(
-                    tariff_id=ht.tariff_id, code=tariff.code
-                )
+                return ActiveTariffResponse(tariff_id=ht.tariff_id, code=tariff.code)
 
         logger.debug(
             f"No active tariff matched effective date: household_id={household_id}, effective_date={effective_date}"
