@@ -16,6 +16,7 @@ from model.dashboard_serializers import (
     MultiplePeriodsSummaryResponse,
 )
 from services.business import MeterReadingConsumptionCalculator
+from services.business.period_utils import midpoint_date
 from services.business.tariff_calculator import RangeBasedTariffCalculator
 
 from starlette import status
@@ -75,10 +76,12 @@ class BillingService:
                 "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
             )
 
-        active_tariff = self._get_active_tariff(bp.household_id, bp.start_date)
+        effective_date = midpoint_date(bp.start_date, bp.end_date)
+
+        active_tariff = self._get_active_tariff(bp.household_id, effective_date)
         if not active_tariff:
             logger.debug(
-                f"No active tariff found for household_id={bp.household_id}, effective_date={bp.start_date}"
+                f"No active tariff found for household_id={bp.household_id}, effective_date={effective_date}"
             )
             raise BillingServiceError(
                 "No active tariff for this period",
@@ -90,7 +93,7 @@ class BillingService:
         )
         try:
             cost_result = self.tariff_calc.calculate_cost(
-                consumption, active_tariff.tariff_id, bp.start_date
+                consumption, active_tariff.tariff_id, effective_date
             )
         except TariffCalculationError as exc:
             logger.debug(
@@ -245,7 +248,7 @@ class BillingService:
             )
             return None
 
-        for ht in hts:
+        for ht in reversed(hts):
             if ht.start_date <= effective_date and (
                 ht.end_date is None or ht.end_date >= effective_date
             ):

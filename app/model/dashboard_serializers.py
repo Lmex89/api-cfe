@@ -30,8 +30,8 @@ class ActiveTariffResponse(BaseModel):
 class ActiveTariffVersionResponse(BaseModel):
     id: int
     tariff_id: int
-    start_date: date
-    end_date: date | None = None
+    year: int
+    month: int
 
 
 class TariffCostCalculationResponse(BaseModel):
