@@ -12,9 +12,15 @@ class UserRole(str, Enum):
 # --- Request / Response models ---
 
 class Token(BaseModel):
-    """Returned by /auth/login on success."""
+    """Returned by /auth/login and /auth/refresh on success."""
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
+
+
+class RefreshTokenRequest(BaseModel):
+    """Payload for POST /auth/refresh."""
+    refresh_token: str
 
 
 class UserPublic(BaseModel):

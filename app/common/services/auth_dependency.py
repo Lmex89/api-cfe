@@ -30,6 +30,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
         username: str | None = payload.get("sub")
         if username is None:
             raise credentials_error
+        if payload.get("token_type") not in (None, "access"):
+            # Reject refresh tokens used as access tokens
+            raise credentials_error
     except JWTError:
         raise credentials_error
 
