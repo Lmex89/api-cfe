@@ -70,6 +70,7 @@ class BillingService:
             )
 
         household = self.uow.household_repository.get(bp.household_id)
+        logger.debug(f"Fetched household for billing period: billing_period_id={billing_period_id}, household_id={bp.household_id}")    
         if not household:
             logger.debug(f"Household not found: household_id={bp.household_id}")
             raise BillingServiceError(
@@ -77,6 +78,9 @@ class BillingService:
             )
 
         effective_date = midpoint_date(bp.start_date, bp.end_date)
+        logger.debug(
+            f"Effective date for tariff lookup: billing_period_id={billing_period_id}, effective_date={effective_date}"
+        )
 
         active_tariff = self._get_active_tariff(bp.household_id, effective_date)
         if not active_tariff:
@@ -248,18 +252,37 @@ class BillingService:
             )
             return None
 
+        target_year = effective_date.year
+        target_month = effective_date.month
+
         for ht in reversed(hts):
             if ht.start_date <= effective_date and (
                 ht.end_date is None or ht.end_date >= effective_date
             ):
                 tariff = self.uow.tariff_repository.get(ht.tariff_id)
-                if tariff:
+                if not tariff:
+                    continue
+
+                # Keep tariff selection aligned with month-based tariff versions.
+                tariff_version = (
+                    self.uow.tariff_version_repository.get_by_tariff_and_period(
+                        ht.tariff_id, target_year, target_month
+                    )
+                )
+                if not tariff_version:
                     logger.debug(
-                        f"Active tariff found: household_id={household_id}, tariff_id={ht.tariff_id}, code={tariff.code}"
+                        f"Skipping tariff without monthly version: household_id={household_id}, tariff_id={ht.tariff_id}, "
+                        f"year={target_year}, month={target_month}"
                     )
-                    return ActiveTariffResponse(
-                        tariff_id=ht.tariff_id, code=tariff.code
-                    )
+                    continue
+
+                logger.debug(
+                    f"Active tariff found: household_id={household_id}, tariff_id={ht.tariff_id}, code={tariff.code}, "
+                    f"year={target_year}, month={target_month}"
+                )
+                return ActiveTariffResponse(
+                    tariff_id=ht.tariff_id, code=tariff.code
+                )
 
         logger.debug(
             f"No active tariff matched effective date: household_id={household_id}, effective_date={effective_date}"
