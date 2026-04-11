@@ -24,7 +24,7 @@ from model.domain.meter_reading_model import MeterReading
 from model.domain.tariff_model import Tariff
 from model.domain.tariff_range_model import TariffRange
 from model.domain.tariff_version_model import TariffVersion
-from model.domain.url_model import UrlModel
+from model.domain.user_model import User
 
 # Create a registry instance
 mapper_registry = registry()
@@ -153,6 +153,26 @@ household_tariffs_table = Table(
     Index("idx_ht_lookup", "household_id", "start_date", "end_date"),
 )
 
+users_table = Table(
+    "users",
+    metadata,
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("username", String(50), nullable=False, unique=True),
+    Column("email", String(255), nullable=True),
+    Column("full_name", String(255), nullable=True),
+    Column("hashed_password", String(255), nullable=False),
+    Column("role", String(20), nullable=False, server_default="user"),
+    Column("is_active", Boolean, nullable=False, server_default="1"),
+    Column("created_at", DateTime, nullable=True, server_default=func.current_timestamp()),
+    Column(
+        "updated_at",
+        DateTime,
+        nullable=True,
+        server_default=func.current_timestamp(),
+        server_onupdate=func.current_timestamp(),
+    ),
+)
+
 
 
 
@@ -248,5 +268,21 @@ def start_mappers():
             "end_date": household_tariffs_table.c.end_date,
             "created_at": household_tariffs_table.c.created_at,
             "updated_at": household_tariffs_table.c.updated_at,
+        },
+    )
+
+    mapper_registry.map_imperatively(
+        User,
+        users_table,
+        properties={
+            "id": users_table.c.id,
+            "username": users_table.c.username,
+            "email": users_table.c.email,
+            "full_name": users_table.c.full_name,
+            "hashed_password": users_table.c.hashed_password,
+            "role": users_table.c.role,
+            "is_active": users_table.c.is_active,
+            "created_at": users_table.c.created_at,
+            "updated_at": users_table.c.updated_at,
         },
     )

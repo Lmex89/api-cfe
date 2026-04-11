@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
-from loguru import logger 
+from loguru import logger
 from common.api.errors.business_error import TariffCalculationError
 from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
@@ -20,6 +20,7 @@ class RangeBasedTariffCalculator:
 
     def __init__(self, uow: TariffConsumptionUnitofWork):
         self.uow = uow
+        logger.info("RangeBasedTariffCalculator initialized")
 
     def calculate_cost(
         self,
@@ -34,9 +35,15 @@ class RangeBasedTariffCalculator:
           - 100-300 kWh: $0.15/kWh
           - >300 kWh: $0.20/kWh
         """
+        logger.info(
+            f"Calculating tariff cost: tariff_id={tariff_id}, effective_date={effective_date}, consumption_kwh={consumption_kwh}"
+        )
 
         tariff_version = self._get_active_tariff_version(tariff_id, effective_date)
         if not tariff_version:
+            logger.debug(
+                f"No active tariff version found: tariff_id={tariff_id}, effective_date={effective_date}"
+            )
             raise TariffCalculationError(
                 "No active tariff version for this period",
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -46,12 +53,18 @@ class RangeBasedTariffCalculator:
             tariff_version_id=tariff_version.id
         )
         if not ranges:
+            logger.debug(
+                f"No tariff ranges configured: tariff_version_id={tariff_version.id}, tariff_id={tariff_id}"
+            )
             raise TariffCalculationError(
                 "No tariff ranges configured for active tariff version",
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
 
         sorted_ranges = sorted(ranges, key=lambda r: r.range_min)
+        logger.debug(
+            f"Loaded tariff ranges: tariff_version_id={tariff_version.id}, ranges_count={len(sorted_ranges)}"
+        )
 
         total_cost = Decimal("0")
         remaining_kwh = consumption_kwh
@@ -68,11 +81,19 @@ class RangeBasedTariffCalculator:
             # Apply price for this range
             range_cost = consumption_in_range * tariff_range.price_per_kwh
             total_cost += range_cost
+            logger.debug(
+                f"Applied range: min={tariff_range.range_min}, max={tariff_range.range_max}, "
+                f"price_per_kwh={tariff_range.price_per_kwh}, consumption_in_range={consumption_in_range}, "
+                f"range_cost={range_cost}, running_total={total_cost}"
+            )
 
             remaining_kwh -= consumption_in_range
 
         iva = total_cost * Decimal("0.16")  # Example IVA calculation (16%)
         dap = total_cost * Decimal("0.05")  # Example DAP calculation (5%)
+        logger.debug(
+            f"Final tax breakdown: total_cost={total_cost}, iva={iva}, dap={dap}, remaining_kwh={remaining_kwh}"
+        )
         logger.info(f"Calculated cost: {total_cost}, IVA: {iva}, DAP: {dap}")
 
         return TariffCostCalculationResponse(
@@ -93,11 +114,16 @@ class RangeBasedTariffCalculator:
             tariff_id=tariff_id, limit=1000
         )
         if not versions:
+            logger.debug(f"No tariff versions found: tariff_id={tariff_id}")
             return None
 
         for version in versions:
             if version.start_date <= effective_date:
                 if version.end_date is None or version.end_date >= effective_date:
+                    logger.debug(
+                        f"Active tariff version found: tariff_id={tariff_id}, version_id={version.id}, "
+                        f"start_date={version.start_date}, end_date={version.end_date}"
+                    )
                     return ActiveTariffVersionResponse(
                         id=version.id,
                         tariff_id=version.tariff_id,
@@ -105,4 +131,7 @@ class RangeBasedTariffCalculator:
                         end_date=version.end_date,
                     )
 
+        logger.debug(
+            f"No active tariff version matched date: tariff_id={tariff_id}, effective_date={effective_date}"
+        )
         return None

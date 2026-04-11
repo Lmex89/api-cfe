@@ -8,6 +8,7 @@ from db.repositories.tariff_range_repository import TariffRangeRepository
 from db.repositories.tariff_repository import TariffRepository
 from db.repositories.tariff_version_repository import TariffVersionRepository
 from db.repositories.url_repository import UrlRepository
+from db.repositories.user_repository import UserRepository
 
 
 
@@ -28,6 +29,7 @@ class TariffConsumptionUnitofWork(AbstractUnitOfWork):
         self.billing_period_repository = BillingPeriodRepository(self.session)
         self.tariff_range_repository = TariffRangeRepository(self.session)
         self.tariff_version_repository = TariffVersionRepository(self.session)
+        self.user_repository = UserRepository(self.session)
         return self
 
     def __exit__(self, *args):

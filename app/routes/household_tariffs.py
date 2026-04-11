@@ -1,8 +1,9 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from common.api.responses import responses as HTTP_RESPONSES
+from common.services.auth_dependency import get_current_user
 from model.household_tariff_serializers import (
     HouseholdTariffCreate,
     HouseholdTariffDeleteResponse,
@@ -11,7 +12,12 @@ from model.household_tariff_serializers import (
 )
 from services import household_tariff_handler
 
-router = APIRouter(prefix="/household-tariffs", tags=["household-tariffs"], responses=HTTP_RESPONSES)
+router = APIRouter(
+    prefix="/household-tariffs",
+    tags=["household-tariffs"],
+    responses=HTTP_RESPONSES,
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("", response_model=HouseholdTariffResponse, status_code=status.HTTP_201_CREATED)

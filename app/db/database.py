@@ -13,7 +13,3 @@ engine = create_engine(
 )
 
 DEFAULT_SESSION_FACTORY = sessionmaker(bind=engine, expire_on_commit=False)
-
-
-def init_db() -> None:
-    metadata.create_all(engine)
