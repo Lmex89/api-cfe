@@ -1,7 +1,11 @@
 from typing import List, Optional
 
 from fastapi import HTTPException
-from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
+from starlette.status import (
+    HTTP_404_NOT_FOUND,
+    HTTP_409_CONFLICT,
+    HTTP_422_UNPROCESSABLE_ENTITY,
+)
 
 from db.uow import TariffConsumptionUnitofWork
 from model.domain.tariff_version_model import TariffVersion
@@ -12,16 +16,33 @@ from model.tariff_version_serializers import (
 )
 
 
+def _validate_year_month(year: int, month: int) -> None:
+    if year < 1900 or year > 3000:
+        raise HTTPException(
+            HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="year must be between 1900 and 3000",
+        )
+
+    if month < 1 or month > 12:
+        raise HTTPException(
+            HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="month must be between 1 and 12",
+        )
+
+
 def create_tariff_version(payload: TariffVersionCreate) -> TariffVersionResponse:
+    _validate_year_month(payload.year, payload.month)
+
     with TariffConsumptionUnitofWork() as uow:
-        existing = uow.tariff_version_repository.get_by_tariff_and_start_date(
+        existing = uow.tariff_version_repository.get_by_tariff_and_period(
             tariff_id=payload.tariff_id,
-            start_date=payload.start_date,
+            year=payload.year,
+            month=payload.month,
         )
         if existing:
             raise HTTPException(
                 HTTP_409_CONFLICT,
-                detail="Tariff version already exists for this tariff and start_date",
+                detail="Tariff version already exists for this tariff, year and month",
             )
 
         item = TariffVersion(**payload.model_dump())
@@ -61,15 +82,26 @@ def update_tariff_version(
             raise HTTPException(HTTP_404_NOT_FOUND, detail="Tariff version not found")
 
         incoming = payload.model_dump(exclude_unset=True)
-        if "start_date" in incoming and incoming["start_date"] != item.start_date:
-            existing = uow.tariff_version_repository.get_by_tariff_and_start_date(
+
+        new_year = incoming.get("year", item.year)
+        new_month = incoming.get("month", item.month)
+        _validate_year_month(new_year, new_month)
+
+        year_or_month_updated = (
+            ("year" in incoming and incoming["year"] != item.year)
+            or ("month" in incoming and incoming["month"] != item.month)
+        )
+
+        if year_or_month_updated:
+            existing = uow.tariff_version_repository.get_by_tariff_and_period(
                 tariff_id=item.tariff_id,
-                start_date=incoming["start_date"],
+                year=new_year,
+                month=new_month,
             )
             if existing and existing.id != tariff_version_id:
                 raise HTTPException(
                     HTTP_409_CONFLICT,
-                    detail="Tariff version already exists for this tariff and start_date",
+                    detail="Tariff version already exists for this tariff, year and month",
                 )
 
         for field, value in incoming.items():

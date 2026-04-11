@@ -118,18 +118,17 @@ class RangeBasedTariffCalculator:
             return None
 
         for version in versions:
-            if version.start_date <= effective_date:
-                if version.end_date is None or version.end_date >= effective_date:
-                    logger.debug(
-                        f"Active tariff version found: tariff_id={tariff_id}, version_id={version.id}, "
-                        f"start_date={version.start_date}, end_date={version.end_date}"
-                    )
-                    return ActiveTariffVersionResponse(
-                        id=version.id,
-                        tariff_id=version.tariff_id,
-                        start_date=version.start_date,
-                        end_date=version.end_date,
-                    )
+            if version.year == effective_date.year and version.month == effective_date.month:
+                logger.debug(
+                    f"Active tariff version found: tariff_id={tariff_id}, version_id={version.id}, "
+                    f"year={version.year}, month={version.month}"
+                )
+                return ActiveTariffVersionResponse(
+                    id=version.id,
+                    tariff_id=version.tariff_id,
+                    year=version.year,
+                    month=version.month,
+                )
 
         logger.debug(
             f"No active tariff version matched date: tariff_id={tariff_id}, effective_date={effective_date}"

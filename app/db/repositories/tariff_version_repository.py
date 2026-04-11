@@ -1,4 +1,3 @@
-from datetime import date
 from typing import Any, List, Optional
 
 from common.db.base import BaseRepository
@@ -26,18 +25,22 @@ class TariffVersionRepository(BaseRepository):
         if tariff_id is not None:
             query = query.filter(TariffVersion.tariff_id == tariff_id)
         return (
-            query.order_by(TariffVersion.start_date.asc(), TariffVersion.id.asc())
+            query.order_by(
+                TariffVersion.year.asc(),
+                TariffVersion.month.asc(),
+                TariffVersion.id.asc(),
+            )
             .offset(offset)
             .limit(limit)
             .all()
         )
 
-    def get_by_tariff_and_start_date(
-        self, tariff_id: int, start_date: date
+    def get_by_tariff_and_period(
+        self, tariff_id: int, year: int, month: int
     ) -> Optional[TariffVersion]:
         return (
             self.session.query(TariffVersion)
-            .filter_by(tariff_id=tariff_id, start_date=start_date)
+            .filter_by(tariff_id=tariff_id, year=year, month=month)
             .first()
         )
 
