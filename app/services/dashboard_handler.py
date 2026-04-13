@@ -184,6 +184,12 @@ def _build_meter_reading_history(
     resolved_query: ResolvedMeterReadingQuery,
 ) -> tuple[List[MeterReadingWithHistoryResponse], float]:
     """Transform raw readings into dashboard rows and aggregate consumption."""
+    logger.debug(
+        f"Building meter reading history: household_id={household_id}, "
+        f"reading_count={len(readings)}, "
+        f"start_date={resolved_query.start_date}, end_date={resolved_query.end_date}, "
+        f"billing_period_id={resolved_query.billing_period.id if resolved_query.billing_period else 'N/A'}"
+    )
     if not readings:
         logger.debug(
             f"No meter readings found for dashboard history: household_id={household_id}"
@@ -231,6 +237,11 @@ def _build_interval_details(
     billing_period: Optional[BillingPeriod],
 ) -> IntervalDetails:
     """Compute row metrics and cumulative pricing from the first reading to the current one."""
+    logger.debug(
+        f"Calculating interval details: household_id={household_id}, "
+        f"first_reading_id={first_reading.id}, current_reading_id={current_reading.id}, "
+        f"billing_period_id={billing_period.id if billing_period else 'N/A'}"
+    )  
     billing_period_cost = _calculate_interval_cost(
         household_id=household_id,
         start_date=first_reading.reading_date,
@@ -240,6 +251,11 @@ def _build_interval_details(
     )
 
     if previous_reading is None:
+        logger.debug(
+            f"First reading interval details: household_id={household_id}, "
+            f"first_reading_id={first_reading.id}, current_reading_id={current_reading.id}, "
+            f"billing_period_cost={billing_period_cost.total_cost if billing_period_cost else 'N/A'}"
+        )
         return IntervalDetails(
             consumption_since_last=None,
             days_since_last=None,
@@ -282,6 +298,10 @@ def _calculate_interval_cost(
 ) -> Optional[BillingPeriodCostResponse]:
     """Calculate tariff cost for a single interval, tolerating missing tariff data."""
     try:
+        logger.debug(
+            f"Calculating interval cost: household_id={household_id}, start_date={start_date}, end_date={end_date}, "
+            f"billing_period_id={billing_period.id if billing_period else 'N/A'}"
+        )
         cost = billing_service.calculate_cost_for_date_range(
             household_id=household_id,
             start_date=start_date,
@@ -296,7 +316,7 @@ def _calculate_interval_cost(
     except BillingServiceError as exc:
         logger.warning(
             f"Unable to calculate interval cost: household_id={household_id}, start_date={start_date}, "
-            f"end_date={end_date}, reason={exc.message}"
+            f"end_date={end_date}, billing_period_id={billing_period.id if billing_period else 'N/A'}, reason={exc.message}"
         )
         return None
 
