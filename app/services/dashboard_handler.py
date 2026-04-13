@@ -1,7 +1,6 @@
 """Dashboard handler helpers for meter-reading history responses."""
 
 from datetime import date
-import re
 from typing import List, Optional
 
 from fastapi import HTTPException, status
@@ -306,7 +305,7 @@ def _calculate_interval_cost(
             household_id=household_id,
             start_date=start_date,
             end_date=end_date,
-            billing_period=billing_period.id if billing_period else None,
+            billing_period_id=billing_period.id if billing_period else None,
         )
         logger.debug(
             f"Calculated interval cost: household_id={household_id}, start_date={start_date}, "
