@@ -178,3 +178,18 @@ The system manages the following core domain concepts:
 - The Dockerfile uses a multi-stage build with Alpine + MariaDB connector for `mysqlclient`
 - Database isolation level is set to `REPEATABLE READ`
 - The `EntityNotFoundException` handler returns HTTP status **420** (non-standard)
+
+
+
+## Working Rules
+
+- Use the `docs` subagent for library, API, setup, and configuration questions.
+- Prefer Context7 for current, version-specific documentation instead of relying on model memory.
+- If a task depends on repo code, inspect the local files first and then consult Context7 for external API details.
+- Keep changes minimal and preserve the current FastAPI modular route layout.
+- Avoid guessing about external APIs when a docs lookup can confirm the behavior.
+
+## Context7
+
+- The project uses Context7 through OpenCode MCP.
+- The docs-focused subagent lives at `.opencode/agents/docs.md`.
