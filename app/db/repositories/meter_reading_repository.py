@@ -2,6 +2,7 @@ from datetime import date
 from typing import Any, List, Optional
 
 from common.db.base import BaseRepository
+from common.model.rest import ResolvedMeterReadingQuery
 from model.domain.meter_reading_model import MeterReading
 
 

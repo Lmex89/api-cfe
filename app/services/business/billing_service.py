@@ -104,8 +104,19 @@ class BillingService:
             raise BillingServiceError(
                 "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
             )
-
-        effective_date = midpoint_date(start_date, end_date)
+        if billing_period_id is None:
+            logger.debug(
+                f"No billing_period_id provided, using date range midpoint for tariff lookup: household_id={household_id}, start_date={start_date}, end_date={end_date}"
+            )
+            effective_date = midpoint_date(start_date, end_date)
+        else:
+            logger.debug(
+                f"Billing_period_id provided, using midpoint between start_date and billing period end date for tariff lookup: household_id={household_id}, billing_period_id={billing_period_id}"
+            )
+            effective_date = midpoint_date(
+                start_date,
+                self.uow.billing_period_repository.get(billing_period_id).end_date,
+            )
         logger.debug(
             f"Effective date for tariff lookup: household_id={household_id}, billing_period_id={billing_period_id}, effective_date={effective_date}"
         )
