@@ -183,13 +183,14 @@ def _build_meter_reading_history(
         )
         return [], 0.0
 
-    baseline_kwh = float(readings[0].reading_kwh)
+    first_reading = readings[0]
     total_consumption = 0.0
     responses: List[MeterReadingWithHistoryResponse] = []
 
     for index, reading in enumerate(readings):
         previous_reading = readings[index - 1] if index > 0 else None
         interval = _build_interval_details(
+            first_reading=first_reading,
             current_reading=reading,
             previous_reading=previous_reading,
             household_id=household_id,
@@ -214,18 +215,26 @@ def _build_meter_reading_history(
 
 
 def _build_interval_details(
+    first_reading: MeterReading,
     current_reading: MeterReading,
     previous_reading: Optional[MeterReading],
     household_id: int,
     billing_service: BillingService,
 ) -> IntervalDetails:
-    """Compute consumption, duration, averages, and pricing for one reading interval."""
+    """Compute row metrics and cumulative pricing from the first reading to the current one."""
+    billing_period_cost = _calculate_interval_cost(
+        household_id=household_id,
+        start_date=first_reading.reading_date,
+        end_date=current_reading.reading_date,
+        billing_service=billing_service,
+    )
+
     if previous_reading is None:
         return IntervalDetails(
             consumption_since_last=None,
             days_since_last=None,
             average_daily_consumption=None,
-            billing_period_cost=None,
+            billing_period_cost=billing_period_cost,
             consumption_for_total=0.0,
         )
 
@@ -238,20 +247,16 @@ def _build_interval_details(
         average_daily_consumption = consumption_since_last / days_since_last
 
     logger.debug(
-        f"Calculated interval details: household_id={household_id}, previous_reading_id={previous_reading.id}, "
-        f"current_reading_id={current_reading.id}, consumption_since_last={consumption_since_last}, "
-        f"days_since_last={days_since_last}, average_daily_consumption={average_daily_consumption}"
+        f"Calculated interval details: household_id={household_id}, first_reading_id={first_reading.id}, "
+        f"previous_reading_id={previous_reading.id}, current_reading_id={current_reading.id}, "
+        f"consumption_since_last={consumption_since_last}, days_since_last={days_since_last}, "
+        f"average_daily_consumption={average_daily_consumption}"
     )
     return IntervalDetails(
         consumption_since_last=consumption_since_last,
         days_since_last=days_since_last,
         average_daily_consumption=average_daily_consumption,
-        billing_period_cost=_calculate_interval_cost(
-            household_id=household_id,
-            start_date=previous_reading.reading_date,
-            end_date=current_reading.reading_date,
-            billing_service=billing_service,
-        ),
+        billing_period_cost=billing_period_cost,
         consumption_for_total=consumption_since_last,
     )
 
