@@ -4,7 +4,9 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.params import Depends
 
+from common.services.auth_dependency import get_current_user
 from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     BillingPeriodCostResponse,
@@ -12,13 +14,16 @@ from model.dashboard_serializers import (
     MeterReadingHistoryDashboardResponse,
     MultiplePeriodsSummaryResponse,
 )
-from services import dashboard_handler
+from services.dashboard_service import DashboardService
 from services.business.billing_service import BillingService, BillingServiceError
 
 router = APIRouter(
     prefix="/dashboards",
     tags=["dashboards"],
+    dependencies=[Depends(get_current_user)],
 )
+
+dashboard_service = DashboardService()
 
 
 @router.get(
@@ -112,7 +117,7 @@ def get_household_meter_readings_with_history(
         default=None, description="Period end (YYYY-MM-DD)"
     ),
 ) -> MeterReadingHistoryDashboardResponse:
-    return dashboard_handler.get_household_meter_readings_with_history(
+    return dashboard_service.get_household_meter_readings_with_history(
         household_id=household_id,
         billing_period_id=billing_period_id,
         start_date=start_date,

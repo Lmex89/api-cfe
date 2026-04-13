@@ -15,6 +15,13 @@ class ValidationErrorModel(BaseModel):
 
 
 @dataclass(frozen=True)
+class MeterReadingFilters:
+    billing_period_id: Optional[int] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+@dataclass(frozen=True)
 class ResolvedMeterReadingQuery:
     start_date: date
     end_date: date
