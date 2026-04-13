@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class BillingPeriodCostResponse(BaseModel):
-    billing_period_id: int
+    billing_period_id: Optional[int] = None
     household_id: int
     household_name: str
     period_start: date
@@ -86,6 +86,7 @@ class MeterReadingWithHistoryResponse(BaseModel):
     consumption_since_last: Optional[float] = None
     days_since_last: Optional[int] = None
     average_daily_consumption_since_last: Optional[float] = None
+    billing_period_cost: Optional[BillingPeriodCostResponse] = None
 
 
 class BillingPeriodInfoResponse(BaseModel):
