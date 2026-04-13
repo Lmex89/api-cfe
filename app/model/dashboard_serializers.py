@@ -88,6 +88,13 @@ class MeterReadingWithHistoryResponse(BaseModel):
     average_daily_consumption_since_last: Optional[float] = None
 
 
+class BillingPeriodInfoResponse(BaseModel):
+    """Billing period information."""
+    id: int
+    start_date: date
+    end_date: date
+
+
 class MeterReadingHistoryDashboardResponse(BaseModel):
     """Dashboard response for meter readings with historical consumption."""
     household: HouseholdResponse
@@ -98,8 +105,4 @@ class MeterReadingHistoryDashboardResponse(BaseModel):
     readings: List[MeterReadingWithHistoryResponse]
 
 
-class BillingPeriodInfoResponse(BaseModel):
-    """Billing period information."""
-    id: int
-    start_date: date
-    end_date: date
+

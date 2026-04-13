@@ -23,6 +23,7 @@ from services.business.billing_service import BillingService, BillingServiceErro
 router = APIRouter(
     prefix="/dashboards",
     tags=["dashboards"],
+    dependencies=[Depends(get_current_user)],
 )
 
 
