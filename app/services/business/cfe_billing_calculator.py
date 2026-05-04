@@ -3,9 +3,9 @@
 Implements the 'Llenado Secuencial de Escalones Prorrateados' algorithm:
 1. Split the billing period into per-calendar-month segments.
 2. Prorate each tier's capacity by the segment's days vs. the full calendar month.
-3. Fill the cheapest tier (Básico) across ALL segments before touching the next tier.
-4. Distribute each tier's energy allocation proportionally by prorated capacity.
-5. For unlimited tiers (range_max is NULL), distribute by segment days.
+3. If the period spans multiple segments, split consumption by segment days first.
+4. Fill tiers sequentially inside each segment (Básico -> Intermedio -> Excedente).
+5. For single-segment periods, preserve the previous sequential behavior.
 """
 
 from __future__ import annotations
@@ -14,15 +14,17 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from loguru import logger
 
 from common.api.errors.business_error import TariffCalculationError
-from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import CfeBillingBreakdownResponse, CfeTierLineItem
 from services.business.period_utils import MonthSegment, split_by_month_segments
 from starlette import status
+
+if TYPE_CHECKING:
+    from db.uow import TariffConsumptionUnitofWork
 
 _TIER_NAMES: Dict[int, str] = {
     1: "Básico",
@@ -50,7 +52,7 @@ class CfeSequentialBillingCalculator:
     period into monthly segments and apply per-month tariff versions.
     """
 
-    def __init__(self, uow: TariffConsumptionUnitofWork) -> None:
+    def __init__(self, uow: "TariffConsumptionUnitofWork") -> None:
         self.uow = uow
         logger.info("CfeSequentialBillingCalculator initialized")
 
@@ -78,7 +80,7 @@ class CfeSequentialBillingCalculator:
         logger.debug(f"Month segments: {[(s.year, s.month, s.segment_days) for s in segments]}")
 
         slots = self._build_prorated_slots(segments, tariff_id)
-        self._fill_sequentially(slots, consumption_kwh)
+        self._fill_by_segment_or_single(slots, consumption_kwh)
 
         return self._build_response(slots)
 
@@ -147,6 +149,52 @@ class CfeSequentialBillingCalculator:
 
         return slots
 
+    def _fill_by_segment_or_single(
+        self, slots: List[_ProratedSlot], consumption_kwh: Decimal
+    ) -> None:
+        """Apply mixed-period segment allocation or keep single-segment behavior."""
+        segment_keys = {
+            self._segment_key(slot.segment)
+            for slot in slots
+        }
+        if len(segment_keys) <= 1:
+            self._fill_sequentially(slots, consumption_kwh)
+            return
+
+        grouped = self._group_slots_by_segment(slots)
+        ordered_keys = sorted(
+            grouped.keys(),
+            key=lambda key: (key[0], key[1], key[2], key[3]),
+        )
+
+        total_days = sum(
+            Decimal(grouped[key][0].segment.segment_days)
+            for key in ordered_keys
+        )
+        if total_days <= Decimal("0"):
+            logger.warning("Skipping segment allocation because total_days is zero")
+            return
+
+        allocated = Decimal("0")
+        last_index = len(ordered_keys) - 1
+
+        for index, key in enumerate(ordered_keys):
+            segment_slots = grouped[key]
+            segment_days = Decimal(segment_slots[0].segment.segment_days)
+
+            if index == last_index:
+                segment_consumption = max(Decimal("0"), consumption_kwh - allocated)
+            else:
+                segment_consumption = (consumption_kwh * segment_days) / total_days
+                allocated += segment_consumption
+
+            logger.debug(
+                f"Segment allocation: seg={key[0]}/{key[1]:02d} "
+                f"start={key[2]} end={key[3]} days={segment_days} "
+                f"segment_consumption={segment_consumption}"
+            )
+            self._fill_sequentially(segment_slots, segment_consumption)
+
     def _fill_sequentially(
         self, slots: List[_ProratedSlot], consumption_kwh: Decimal
     ) -> None:
@@ -193,6 +241,22 @@ class CfeSequentialBillingCalculator:
             logger.debug(
                 f"After filling tier {level}: remaining={remaining} kWh"
             )
+
+    @staticmethod
+    def _segment_key(segment: MonthSegment) -> Tuple[int, int, date, date]:
+        return (segment.year, segment.month, segment.start_date, segment.end_date)
+
+    def _group_slots_by_segment(
+        self, slots: List[_ProratedSlot]
+    ) -> Dict[Tuple[int, int, date, date], List[_ProratedSlot]]:
+        grouped: Dict[Tuple[int, int, date, date], List[_ProratedSlot]] = defaultdict(list)
+        for slot in slots:
+            grouped[self._segment_key(slot.segment)].append(slot)
+
+        for key_slots in grouped.values():
+            key_slots.sort(key=lambda slot: slot.tier_level)
+
+        return grouped
 
     def _build_response(self, slots: List[_ProratedSlot]) -> CfeBillingBreakdownResponse:
         """Aggregate filled slots into the response model."""
