@@ -35,6 +35,15 @@ app/
     orm.py             # Table definitions + imperative mapper (start_mappers)
     uow.py             # Unit of Work (TariffConsumptionUnitofWork) with all repositories
     repositories/      # Per-entity repository classes
+      billing_period_repository.py
+      household_repository.py
+      household_tariff_repository.py
+      meter_reading_repository.py
+      tariff_range_repository.py
+      tariff_repository.py
+      tariff_version_repository.py
+      url_repository.py
+      user_repository.py
   model/               # Pydantic serializers & domain models
     domain/            # Domain entities (BillingPeriod, Household, Tariff, User, etc.)
     auth.py            # Auth-related Pydantic models
@@ -52,7 +61,11 @@ app/
     tariff_versions.py
     tariffs.py
   services/            # Application/business logic handlers
-    business/          # Business-specific services
+    business/          # Business-specific calculation services
+      billing_service.py        # Orchestrates billing cost calculation for a period
+      cfe_billing_calculator.py # CFE tier-based kWh cost calculator
+      period_utils.py           # Billing period date/segment utilities
+      tariff_calculator.py      # Applies tariff ranges to consumption data
     *_handler.py       # CRUD/service methods per domain
     tariff_version_normalizer.py
 ```

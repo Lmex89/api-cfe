@@ -1,7 +1,6 @@
 """Billing orchestration - composes smaller domain services (composition over inheritance)."""
 
 from datetime import date
-from decimal import Decimal
 from typing import Optional
 
 from loguru import logger
@@ -309,7 +308,7 @@ class BillingService:
 
                 # Keep tariff selection aligned with month-based tariff versions.
                 tariff_version = (
-                    self.uow.tariff_version_repository.get_by_tariff_and_period(
+                    self.uow.tariff_version_repository.get_by_tariff_and_period_or_latest_before(
                         ht.tariff_id, target_year, target_month
                     )
                 )
@@ -322,7 +321,8 @@ class BillingService:
 
                 logger.debug(
                     f"Active tariff found: household_id={household_id}, tariff_id={ht.tariff_id}, code={tariff.code}, "
-                    f"year={target_year}, month={target_month}"
+                    f"year={target_year}, month={target_month}, version_id={tariff_version.id}, "
+                    f"version_year={tariff_version.year}, version_month={tariff_version.month}"
                 )
                 return ActiveTariffResponse(tariff_id=ht.tariff_id, code=tariff.code)
 

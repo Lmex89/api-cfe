@@ -93,7 +93,7 @@ class CfeSequentialBillingCalculator:
         slots: List[_ProratedSlot] = []
 
         for seg in segments:
-            version = self.uow.tariff_version_repository.get_by_tariff_and_period(
+            version = self.uow.tariff_version_repository.get_by_tariff_and_period_or_latest_before(
                 tariff_id, seg.year, seg.month
             )
             if not version:
@@ -101,6 +101,13 @@ class CfeSequentialBillingCalculator:
                     f"No tariff version found for tariff_id={tariff_id} "
                     f"year={seg.year} month={seg.month}",
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+
+            if version.year != seg.year or version.month != seg.month:
+                logger.debug(
+                    f"Using fallback tariff version for segment {seg.year}-{seg.month:02d}: "
+                    f"tariff_id={tariff_id}, version_id={version.id}, "
+                    f"version_period={version.year}-{version.month:02d}"
                 )
 
             ranges = self.uow.tariff_range_repository.list(
