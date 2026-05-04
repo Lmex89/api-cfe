@@ -2,6 +2,7 @@ from typing import Any, List, Optional
 
 from common.db.base import BaseRepository
 from model.domain.tariff_version_model import TariffVersion
+from sqlalchemy import and_, or_
 
 
 class TariffVersionRepository(BaseRepository):
@@ -41,6 +42,30 @@ class TariffVersionRepository(BaseRepository):
         return (
             self.session.query(TariffVersion)
             .filter_by(tariff_id=tariff_id, year=year, month=month)
+            .first()
+        )
+
+    def get_by_tariff_and_period_or_latest_before(
+        self, tariff_id: int, year: int, month: int
+    ) -> Optional[TariffVersion]:
+        exact = self.get_by_tariff_and_period(tariff_id=tariff_id, year=year, month=month)
+        if exact:
+            return exact
+
+        return (
+            self.session.query(TariffVersion)
+            .filter(TariffVersion.tariff_id == tariff_id)
+            .filter(
+                or_(
+                    TariffVersion.year < year,
+                    and_(TariffVersion.year == year, TariffVersion.month < month),
+                )
+            )
+            .order_by(
+                TariffVersion.year.desc(),
+                TariffVersion.month.desc(),
+                TariffVersion.id.desc(),
+            )
             .first()
         )
 
