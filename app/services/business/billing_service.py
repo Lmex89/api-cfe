@@ -1,6 +1,7 @@
 """Billing orchestration - composes smaller domain services (composition over inheritance)."""
 
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from loguru import logger
@@ -16,8 +17,8 @@ from model.dashboard_serializers import (
     MultiplePeriodsSummaryResponse,
 )
 from services.business import MeterReadingConsumptionCalculator
+from services.business.cfe_billing_calculator import CfeSequentialBillingCalculator
 from services.business.period_utils import midpoint_date
-from services.business.tariff_calculator import RangeBasedTariffCalculator
 
 from starlette import status
 from model.domain.billing_period_model import BillingPeriod
@@ -42,13 +43,13 @@ class BillingService:
         self,
         uow: TariffConsumptionUnitofWork,
         consumption_calc: Optional[MeterReadingConsumptionCalculator] = None,
-        tariff_calc: Optional[RangeBasedTariffCalculator] = None,
+        tariff_calc: Optional[CfeSequentialBillingCalculator] = None,
     ):
         self.uow = uow
         self.consumption_calc = consumption_calc or MeterReadingConsumptionCalculator(
             uow
         )
-        self.tariff_calc = tariff_calc or RangeBasedTariffCalculator(uow)
+        self.tariff_calc = tariff_calc or CfeSequentialBillingCalculator(uow)
         logger.info("BillingService initialized")
         logger.debug(
             f"BillingService dependencies: consumption_calc={type(self.consumption_calc).__name__}, "
@@ -135,8 +136,8 @@ class BillingService:
             household_id, start_date, end_date
         )
         try:
-            cost_result = self.tariff_calc.calculate_cost(
-                consumption, active_tariff.tariff_id, effective_date
+            cfe_breakdown = self.tariff_calc.calculate_cost(
+                consumption, active_tariff.tariff_id, start_date, end_date
             )
         except TariffCalculationError as exc:
             logger.debug(
@@ -144,17 +145,20 @@ class BillingService:
             )
             raise BillingServiceError(exc.message, exc.status_code) from exc
 
-        cost = cost_result.total_cost
+        base_cost = cfe_breakdown.subtotal_before_taxes
+        iva = cfe_breakdown.iva
+        dap = cfe_breakdown.dap
+
         avg_daily = self.consumption_calc.calculate_average_daily(
             household_id, start_date, end_date
         )
         logger.debug(
             f"Billing period metrics: consumption={consumption}, avg_daily={avg_daily}, "
-            f"base_cost={cost}, iva={cost_result.iva}, dap={cost_result.dap}"
+            f"base_cost={base_cost}, iva={iva}, dap={dap}"
         )
         logger.info(
             f"Calculated cost for household_id={household_id}, billing_period_id={billing_period_id}, "
-            f"total_cost={cost_result.iva + cost + cost_result.dap}"
+            f"total_cost={iva + base_cost + dap}"
         )
 
         return BillingPeriodCostResponse(
@@ -166,12 +170,13 @@ class BillingService:
             total_consumption_kwh=float(consumption),
             average_daily_kwh=float(avg_daily),
             tariff_code=active_tariff.code,
-            total_cost_witout_taxes=float(cost),
-            iva=float(cost_result.iva),
-            total_cost_with_iva=float(cost_result.iva + cost),
-            dap=float(cost_result.dap),
-            total_cost=float(cost_result.iva + cost + cost_result.dap),
-            cost_per_kwh=float(cost / consumption) if consumption > 0 else 0,
+            total_cost_witout_taxes=float(base_cost),
+            iva=float(iva),
+            total_cost_with_iva=float(iva + base_cost),
+            dap=float(dap),
+            total_cost=float(iva + base_cost + dap),
+            cost_per_kwh=float(base_cost / consumption) if consumption > 0 else 0,
+            cfe_breakdown=cfe_breakdown,
         )
 
     def get_household_consumption_dashboard(

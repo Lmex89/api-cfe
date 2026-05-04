@@ -5,6 +5,26 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+class CfeTierLineItem(BaseModel):
+    segment_year: int
+    segment_month: int
+    tier_level: int
+    tier_name: str
+    days_in_segment: int
+    prorated_kwh_capacity: Optional[float] = None  # None = unlimited
+    kwh_charged: float
+    price_per_kwh: float
+    subtotal: float
+
+
+class CfeBillingBreakdownResponse(BaseModel):
+    tier_lines: List[CfeTierLineItem]
+    subtotal_before_taxes: float
+    iva: float
+    dap: float
+    total: float
+
+
 class BillingPeriodCostResponse(BaseModel):
     billing_period_id: Optional[int] = None
     household_id: int
@@ -16,10 +36,11 @@ class BillingPeriodCostResponse(BaseModel):
     tariff_code: str
     total_cost_witout_taxes: float
     cost_per_kwh: float
-    iva: float 
+    iva: float
     total_cost_with_iva: float
     dap: float
     total_cost: float
+    cfe_breakdown: Optional[CfeBillingBreakdownResponse] = None
 
 
 class ActiveTariffResponse(BaseModel):
