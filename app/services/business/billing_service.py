@@ -159,6 +159,7 @@ class BillingService:
             f"Calculated cost for household_id={household_id}, billing_period_id={billing_period_id}, "
             f"total_cost={iva + base_cost + dap}"
         )
+        consumption_value = float(consumption)
 
         return BillingPeriodCostResponse(
             billing_period_id=billing_period_id,
@@ -166,7 +167,7 @@ class BillingService:
             household_name=household.name,
             period_start=start_date,
             period_end=end_date,
-            total_consumption_kwh=float(consumption),
+            total_consumption_kwh=consumption_value,
             average_daily_kwh=float(avg_daily),
             tariff_code=active_tariff.code,
             total_cost_witout_taxes=float(base_cost),
@@ -174,7 +175,9 @@ class BillingService:
             total_cost_with_iva=float(iva + base_cost),
             dap=float(dap),
             total_cost=float(iva + base_cost + dap),
-            cost_per_kwh=float(base_cost / consumption) if consumption > 0 else 0,
+            cost_per_kwh=(float(base_cost) / consumption_value)
+            if consumption_value > 0
+            else 0,
             cfe_breakdown=cfe_breakdown,
         )
 
