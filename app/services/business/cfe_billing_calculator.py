@@ -1,15 +1,16 @@
 """CFE SICOM sequential billing calculator.
 
 Implements the 'Llenado Secuencial de Escalones Prorrateados' algorithm:
-1. Split the billing period into per-calendar-month segments.
-2. Prorate each tier's capacity by the segment's days vs. the full calendar month.
-3. If the period spans multiple segments, split consumption by segment days first.
+1. If the billing period is fully within summer (Apr-Sep) or fully outside summer,
+   use midpoint month pricing for the whole period.
+2. If the period crosses summer/non-summer, split into per-calendar-month segments.
+3. Prorate each tier's capacity by the segment's days vs. the full calendar month.
 4. Fill tiers sequentially inside each segment (Básico -> Intermedio -> Excedente).
-5. For single-segment periods, preserve the previous sequential behavior.
 """
 
 from __future__ import annotations
 
+from calendar import monthrange
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
@@ -20,7 +21,7 @@ from loguru import logger
 
 from common.api.errors.business_error import TariffCalculationError
 from model.dashboard_serializers import CfeBillingBreakdownResponse, CfeTierLineItem
-from services.business.period_utils import MonthSegment, split_by_month_segments
+from services.business.period_utils import MonthSegment, midpoint_date, split_by_month_segments
 from starlette import status
 
 if TYPE_CHECKING:
@@ -31,6 +32,9 @@ _TIER_NAMES: Dict[int, str] = {
     2: "Intermedio",
     3: "Excedente",
 }
+
+_SUMMER_START_MONTH = 4
+_SUMMER_END_MONTH = 9
 
 
 @dataclass
@@ -76,7 +80,16 @@ class CfeSequentialBillingCalculator:
             f"start={start_date}, end={end_date}, consumption={consumption_kwh} kWh"
         )
 
-        segments = split_by_month_segments(start_date, end_date)
+        if self._is_single_season_period(start_date, end_date):
+            segments = [self._build_midpoint_segment(start_date, end_date)]
+            logger.debug(
+                f"Single-season billing period detected. Using midpoint month pricing: "
+                f"segment={segments[0].year}-{segments[0].month:02d}, days={segments[0].segment_days}"
+            )
+        else:
+            segments = split_by_month_segments(start_date, end_date)
+            logger.debug("Cross-season billing period detected. Using per-month proration")
+
         logger.debug(f"Month segments: {[(s.year, s.month, s.segment_days) for s in segments]}")
 
         slots = self._build_prorated_slots(segments, tariff_id)
@@ -194,6 +207,28 @@ class CfeSequentialBillingCalculator:
                 f"segment_consumption={segment_consumption}"
             )
             self._fill_sequentially(segment_slots, segment_consumption)
+
+    @staticmethod
+    def _is_summer_month(month: int) -> bool:
+        return _SUMMER_START_MONTH <= month <= _SUMMER_END_MONTH
+
+    def _is_single_season_period(self, start_date: date, end_date: date) -> bool:
+        start_is_summer = self._is_summer_month(start_date.month)
+        end_is_summer = self._is_summer_month(end_date.month)
+        return start_is_summer == end_is_summer
+
+    def _build_midpoint_segment(self, start_date: date, end_date: date) -> MonthSegment:
+        midpoint = midpoint_date(start_date, end_date)
+        calendar_days = monthrange(midpoint.year, midpoint.month)[1]
+        segment_days = (end_date - start_date).days + 1
+        return MonthSegment(
+            year=midpoint.year,
+            month=midpoint.month,
+            calendar_days=calendar_days,
+            segment_days=segment_days,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
     def _fill_sequentially(
         self, slots: List[_ProratedSlot], consumption_kwh: Decimal

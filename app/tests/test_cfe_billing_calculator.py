@@ -32,11 +32,17 @@ class _FakeUow:
 def _build_calculator():
     april_version = TariffVersion(id=101, tariff_id=1, year=2026, month=4)
     may_version = TariffVersion(id=102, tariff_id=1, year=2026, month=5)
+    september_version = TariffVersion(id=103, tariff_id=1, year=2026, month=9)
+    october_version = TariffVersion(id=104, tariff_id=1, year=2026, month=10)
+    november_version = TariffVersion(id=105, tariff_id=1, year=2026, month=11)
 
     version_repo = _FakeTariffVersionRepository(
         {
             (1, 2026, 4): april_version,
             (1, 2026, 5): may_version,
+            (1, 2026, 9): september_version,
+            (1, 2026, 10): october_version,
+            (1, 2026, 11): november_version,
         }
     )
 
@@ -82,6 +88,66 @@ def _build_calculator():
                     price_per_kwh=Decimal("3.50"),
                 ),
             ],
+            103: [
+                TariffRange(
+                    tariff_version_id=103,
+                    range_min=Decimal("0"),
+                    range_max=Decimal("100"),
+                    price_per_kwh=Decimal("1.20"),
+                ),
+                TariffRange(
+                    tariff_version_id=103,
+                    range_min=Decimal("100"),
+                    range_max=Decimal("200"),
+                    price_per_kwh=Decimal("2.20"),
+                ),
+                TariffRange(
+                    tariff_version_id=103,
+                    range_min=Decimal("200"),
+                    range_max=None,
+                    price_per_kwh=Decimal("3.20"),
+                ),
+            ],
+            104: [
+                TariffRange(
+                    tariff_version_id=104,
+                    range_min=Decimal("0"),
+                    range_max=Decimal("100"),
+                    price_per_kwh=Decimal("1.80"),
+                ),
+                TariffRange(
+                    tariff_version_id=104,
+                    range_min=Decimal("100"),
+                    range_max=Decimal("200"),
+                    price_per_kwh=Decimal("2.80"),
+                ),
+                TariffRange(
+                    tariff_version_id=104,
+                    range_min=Decimal("200"),
+                    range_max=None,
+                    price_per_kwh=Decimal("3.80"),
+                ),
+            ],
+            105: [
+                TariffRange(
+                    tariff_version_id=105,
+                    range_min=Decimal("0"),
+                    range_max=Decimal("100"),
+                    price_per_kwh=Decimal("2.00"),
+                ),
+                TariffRange(
+                    tariff_version_id=105,
+                    range_min=Decimal("100"),
+                    range_max=Decimal("200"),
+                    price_per_kwh=Decimal("3.00"),
+                ),
+                TariffRange(
+                    tariff_version_id=105,
+                    range_min=Decimal("200"),
+                    range_max=None,
+                    price_per_kwh=Decimal("4.00"),
+                ),
+            ],
         }
     )
 
@@ -89,7 +155,7 @@ def _build_calculator():
 
 
 class CfeSequentialBillingCalculatorTests(unittest.TestCase):
-    def test_mixed_period_allocates_per_segment_and_preserves_intermediate_split(self):
+    def test_full_summer_period_uses_midpoint_month_pricing_for_all_days(self):
         calc = _build_calculator()
 
         result = calc.calculate_cost(
@@ -99,25 +165,11 @@ class CfeSequentialBillingCalculatorTests(unittest.TestCase):
             end_date=date(2026, 5, 20),
         )
 
-        april_tier_2 = next(
-            line
-            for line in result.tier_lines
-            if line.segment_year == 2026 and line.segment_month == 4 and line.tier_level == 2
-        )
-        may_tier_2 = next(
-            line
-            for line in result.tier_lines
-            if line.segment_year == 2026 and line.segment_month == 5 and line.tier_level == 2
-        )
-        may_tier_1 = next(
-            line
-            for line in result.tier_lines
-            if line.segment_year == 2026 and line.segment_month == 5 and line.tier_level == 1
-        )
+        months = {line.segment_month for line in result.tier_lines}
+        self.assertEqual(months, {5})
 
-        self.assertGreater(april_tier_2.kwh_charged, 0.0)
-        self.assertAlmostEqual(may_tier_2.kwh_charged, 0.0, places=6)
-        self.assertGreater(may_tier_1.kwh_charged, 0.0)
+        may_tier_1 = next(line for line in result.tier_lines if line.tier_level == 1)
+        self.assertAlmostEqual(may_tier_1.price_per_kwh, 1.50, places=6)
 
     def test_single_segment_keeps_sequential_behavior(self):
         calc = _build_calculator()
@@ -143,15 +195,34 @@ class CfeSequentialBillingCalculatorTests(unittest.TestCase):
         self.assertAlmostEqual(april_tier_1.kwh_charged, 100.0, places=6)
         self.assertAlmostEqual(april_tier_2.kwh_charged, 50.0, places=6)
 
-    def test_mixed_period_preserves_total_consumption(self):
+    def test_full_non_summer_period_uses_midpoint_month_pricing_for_all_days(self):
+        calc = _build_calculator()
+
+        result = calc.calculate_cost(
+            consumption_kwh=Decimal("90"),
+            tariff_id=1,
+            start_date=date(2026, 10, 20),
+            end_date=date(2026, 11, 20),
+        )
+
+        months = {line.segment_month for line in result.tier_lines}
+        self.assertEqual(months, {11})
+
+        november_tier_1 = next(line for line in result.tier_lines if line.tier_level == 1)
+        self.assertAlmostEqual(november_tier_1.price_per_kwh, 2.00, places=6)
+
+    def test_cross_season_period_uses_proration_segments(self):
         calc = _build_calculator()
 
         result = calc.calculate_cost(
             consumption_kwh=Decimal("250"),
             tariff_id=1,
-            start_date=date(2026, 4, 20),
-            end_date=date(2026, 5, 20),
+            start_date=date(2026, 9, 20),
+            end_date=date(2026, 10, 20),
         )
+
+        months = {line.segment_month for line in result.tier_lines}
+        self.assertEqual(months, {9, 10})
 
         charged = sum(line.kwh_charged for line in result.tier_lines)
         self.assertAlmostEqual(charged, 250.0, places=6)
