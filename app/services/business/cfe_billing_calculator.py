@@ -10,7 +10,6 @@ Implements the 'Llenado Secuencial de Escalones Prorrateados' algorithm:
 
 from __future__ import annotations
 
-from calendar import monthrange
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
@@ -219,8 +218,10 @@ class CfeSequentialBillingCalculator:
 
     def _build_midpoint_segment(self, start_date: date, end_date: date) -> MonthSegment:
         midpoint = midpoint_date(start_date, end_date)
-        calendar_days = monthrange(midpoint.year, midpoint.month)[1]
         segment_days = (end_date - start_date).days + 1
+        # In single-season midpoint mode, apply midpoint pricing to the whole
+        # period without monthly-capacity scaling.
+        calendar_days = segment_days
         return MonthSegment(
             year=midpoint.year,
             month=midpoint.month,
