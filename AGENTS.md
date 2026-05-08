@@ -1,4 +1,4 @@
-# AGENTS.md — Context for Copilot (api-cfe)
+# AGENTS.md — Context for AI Agents (api-cfe)
 
 ## Project Overview
 
@@ -18,6 +18,7 @@ The project uses **imperative SQLAlchemy ORM mapping** (Core `Table` definitions
 | Logging | Loguru |
 | Containerization | Docker + Docker Compose |
 | CI/CD | GitHub Actions (self-hosted runner) |
+| Python Version | 3.12+ |
 
 ## Project Structure
 
@@ -162,6 +163,21 @@ Endpoints live under `/api/v1/auth`:
 - Access token expiry: 12 hours
 - Refresh token expiry: 7 days
 - Password hashing: bcrypt via passlib
+- Token refresh: Supported with automatic rotation
+
+### Full API Endpoints
+
+| Module | Endpoints |
+|---|---|
+| Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me` |
+| Tariffs | `GET /tariffs`, `POST /tariffs`, `GET /tariffs/{id}`, `PUT /tariffs/{id}`, `DELETE /tariffs/{id}` |
+| Tariff Versions | `GET /tariff-versions`, `POST /tariff-versions`, `GET /tariff-versions/{id}`, `PUT /tariff-versions/{id}`, `DELETE /tariff-versions/{id}` |
+| Tariff Ranges | `GET /tariff-ranges`, `POST /tariff-ranges`, `GET /tariff-ranges/{id}`, `PUT /tariff-ranges/{id}`, `DELETE /tariff-ranges/{id}` |
+| Households | `GET /households`, `POST /households`, `GET /households/{id}`, `PUT /households/{id}`, `DELETE /households/{id}` |
+| Meter Readings | `GET /meter-readings`, `POST /meter-readings`, `GET /meter-readings/{id}`, `DELETE /meter-readings/{id}` |
+| Billing Periods | `GET /billing-periods`, `POST /billing-periods`, `GET /billing-periods/{id}`, `DELETE /billing-periods/{id}` |
+| Household Tariffs | `GET /household-tariffs`, `POST /household-tariffs`, `GET /household-tariffs/{id}`, `DELETE /household-tariffs/{id}` |
+| Dashboards | `GET /dashboards/summary`, `GET /dashboards/consumption` |
 
 ## Domain Entities
 
@@ -201,8 +217,35 @@ The system manages the following core domain concepts:
 - If a task depends on repo code, inspect the local files first and then consult Context7 for external API details.
 - Keep changes minimal and preserve the current FastAPI modular route layout.
 - Avoid guessing about external APIs when a docs lookup can confirm the behavior.
+- All database operations must go through the Unit of Work pattern.
+- New endpoints must be registered in `app/routes/api.py`.
+- Use Pydantic serializers for response validation in `model/` directory.
 
 ## Context7
 
 - The project uses Context7 through OpenCode MCP.
 - The docs-focused subagent lives at `.opencode/agents/docs.md`.
+
+## Testing
+
+- No test framework is currently configured in the project.
+- Manual testing is done via curl or API clients like Postman/Insomnia.
+- Future improvements should include pytest integration.
+
+## Common Tasks
+
+### Adding a New Endpoint
+
+1. Create route handler in `app/routes/<entity>.py`
+2. Add Pydantic serializer in `model/<entity>_serializers.py`
+3. Register router in `app/routes/api.py`
+4. Add repository methods in `app/db/repositories/<entity>_repository.py` if needed
+
+### Adding a New Domain Entity
+
+1. Define `Table` in `app/db/orm.py`
+2. Create domain model in `model/domain/<entity>.py`
+3. Map entity imperatively in `start_mappers()` in `app/db/orm.py`
+4. Create repository class in `app/db/repositories/`
+5. Add repository to `TariffConsumptionUnitofWork` in `app/db/uow.py`
+6. Create Pydantic serializers in `model/`
