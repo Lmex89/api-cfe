@@ -217,12 +217,28 @@ class CfeSequentialBillingCalculatorTests(unittest.TestCase):
         result = calc.calculate_cost(
             consumption_kwh=Decimal("250"),
             tariff_id=1,
-            start_date=date(2026, 9, 20),
-            end_date=date(2026, 10, 20),
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 10, 31),
         )
 
         months = {line.segment_month for line in result.tier_lines}
         self.assertEqual(months, {9, 10})
+
+        charged = sum(line.kwh_charged for line in result.tier_lines)
+        self.assertAlmostEqual(charged, 250.0, places=6)
+
+    def test_cross_season_minority_under_15_days_uses_midpoint(self):
+        calc = _build_calculator()
+
+        result = calc.calculate_cost(
+            consumption_kwh=Decimal("250"),
+            tariff_id=1,
+            start_date=date(2026, 9, 28),
+            end_date=date(2026, 10, 5),
+        )
+
+        months = {line.segment_month for line in result.tier_lines}
+        self.assertEqual(len(months), 1)
 
         charged = sum(line.kwh_charged for line in result.tier_lines)
         self.assertAlmostEqual(charged, 250.0, places=6)

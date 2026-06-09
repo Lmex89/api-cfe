@@ -87,7 +87,31 @@ class CfeSequentialBillingCalculator:
             )
         else:
             segments = split_by_month_segments(start_date, end_date)
-            logger.debug("Cross-season billing period detected. Using per-month proration")
+            summer_days = sum(
+                s.segment_days for s in segments if self._is_summer_month(s.month)
+            )
+            non_summer_days = sum(
+                s.segment_days for s in segments if not self._is_summer_month(s.month)
+            )
+            minority_days = min(summer_days, non_summer_days)
+
+            logger.info(
+                f"Cross-season period detected: total_days={(end_date - start_date).days + 1}, "
+                f"summer_days={summer_days}, non_summer_days={non_summer_days}, "
+                f"minority_days={minority_days}"
+            )
+
+            if minority_days < 15:
+                segments = [self._build_midpoint_segment(start_date, end_date)]
+                logger.info(
+                    f"Minority season < 15 days ({minority_days}). "
+                    f"Falling back to single-segment midpoint pricing."
+                )
+            else:
+                logger.info(
+                    f"Minority season >= 15 days ({minority_days}). "
+                    f"Using per-month prorated segmentation."
+                )
 
         logger.debug(f"Month segments: {[(s.year, s.month, s.segment_days) for s in segments]}")
 
@@ -137,14 +161,29 @@ class CfeSequentialBillingCalculator:
             cal = Decimal(seg.calendar_days)
             seg_d = Decimal(seg.segment_days)
 
+            logger.debug(
+                f"Segment {seg.year}-{seg.month:02d}: calendar_days={cal}, "
+                f"segment_days={seg_d}, ratio={seg_d / cal if cal > 0 else 0}"
+            )
+
             for i, tr in enumerate(sorted_ranges):
                 tier_level = i + 1
 
                 if tr.range_max is not None:
                     range_size = tr.range_max - tr.range_min
                     capacity: Optional[Decimal] = range_size / cal * seg_d
+                    logger.debug(
+                        f"Capacity proration: range_min={tr.range_min}, "
+                        f"range_max={tr.range_max}, range_size={range_size}, "
+                        f"calendar_days={cal}, segment_days={seg_d}, "
+                        f"prorated_capacity={range_size} / {cal} * {seg_d} = {capacity}"
+                    )
                 else:
                     capacity = None  # unlimited
+                    logger.debug(
+                        f"Unlimited tier (last): range_min={tr.range_min}, "
+                        f"range_max=None, capacity=unlimited"
+                    )
 
                 slots.append(
                     _ProratedSlot(
@@ -155,8 +194,8 @@ class CfeSequentialBillingCalculator:
                     )
                 )
                 logger.debug(
-                    f"Slot: seg={seg.year}/{seg.month} tier={tier_level} "
-                    f"cap={capacity} price={tr.price_per_kwh}"
+                    f"Slot created: seg={seg.year}/{seg.month} tier={tier_level} "
+                    f"capacity={capacity} price={tr.price_per_kwh}"
                 )
 
         return slots
@@ -196,15 +235,19 @@ class CfeSequentialBillingCalculator:
 
             if index == last_index:
                 segment_consumption = max(Decimal("0"), consumption_kwh - allocated)
+                logger.debug(
+                    f"Segment allocation (last): seg={key[0]}/{key[1]:02d} "
+                    f"days={segment_days}, remaining after previous: "
+                    f"{consumption_kwh} - {allocated} = {segment_consumption}"
+                )
             else:
                 segment_consumption = (consumption_kwh * segment_days) / total_days
+                logger.debug(
+                    f"Segment allocation: seg={key[0]}/{key[1]:02d} "
+                    f"days={segment_days}/{total_days}, formula: "
+                    f"{consumption_kwh} * {segment_days} / {total_days} = {segment_consumption}"
+                )
                 allocated += segment_consumption
-
-            logger.debug(
-                f"Segment allocation: seg={key[0]}/{key[1]:02d} "
-                f"start={key[2]} end={key[3]} days={segment_days} "
-                f"segment_consumption={segment_consumption}"
-            )
             self._fill_sequentially(segment_slots, segment_consumption)
 
     @staticmethod
@@ -250,32 +293,57 @@ class CfeSequentialBillingCalculator:
             infinite = [s for s in level_slots if s.capacity is None]
 
             if not infinite:
-                # All slots finite: fill the whole level then distribute
                 total_cap = sum(s.capacity for s in finite)  # type: ignore[misc]
                 energy = min(remaining, total_cap)
                 remaining -= energy
 
+                logger.debug(
+                    f"Tier {level} ({_TIER_NAMES[level]}): all finite slots, "
+                    f"total_cap={total_cap}, requesting={remaining + energy}, "
+                    f"filling={energy}, remaining={remaining}"
+                )
+
                 if total_cap > Decimal("0"):
                     for s in finite:
                         s.kwh_charged = energy * s.capacity / total_cap  # type: ignore[operator]
+                        logger.debug(
+                            f"  Slot seg={s.segment.year}/{s.segment.month:02d} "
+                            f"tier={s.tier_level}: "
+                            f"{energy} * {s.capacity} / {total_cap} = {s.kwh_charged} kWh"
+                        )
             else:
-                # Finite slots absorb first, then infinite slots absorb the rest
                 for s in finite:
                     charged = min(remaining, s.capacity)  # type: ignore[arg-type]
                     s.kwh_charged = charged
                     remaining -= charged
+                    logger.debug(
+                        f"  Finite slot seg={s.segment.year}/{s.segment.month:02d} "
+                        f"tier={s.tier_level}: capacity={s.capacity}, "
+                        f"min(remaining_before={remaining + charged}, cap={s.capacity}) "
+                        f"= {charged} kWh consumed"
+                    )
 
                 total_days = sum(
                     Decimal(s.segment.segment_days) for s in infinite
                 )
+                logger.debug(
+                    f"  Infinite slots: total_days={total_days}, "
+                    f"remaining_kwh={remaining}"
+                )
                 for s in infinite:
                     if total_days > Decimal("0"):
                         s.kwh_charged = remaining * Decimal(s.segment.segment_days) / total_days
+                        logger.debug(
+                            f"  Infinite slot seg={s.segment.year}/{s.segment.month:02d} "
+                            f"tier={s.tier_level}: "
+                            f"{remaining} * {s.segment.segment_days} / {total_days} "
+                            f"= {s.kwh_charged} kWh"
+                        )
 
                 remaining = Decimal("0")
 
             logger.debug(
-                f"After filling tier {level}: remaining={remaining} kWh"
+                f"Tier {level} ({_TIER_NAMES[level]}) final: remaining={remaining} kWh"
             )
 
     @staticmethod
@@ -303,6 +371,12 @@ class CfeSequentialBillingCalculator:
             line_subtotal = slot.kwh_charged * slot.price_per_kwh
             subtotal += line_subtotal
 
+            logger.debug(
+                f"Line item: seg={slot.segment.year}/{slot.segment.month:02d} "
+                f"tier={slot.tier_level} ({_TIER_NAMES.get(slot.tier_level, '?')}), "
+                f"kwh={slot.kwh_charged} × price={slot.price_per_kwh} = {line_subtotal}"
+            )
+
             tier_lines.append(
                 CfeTierLineItem(
                     segment_year=slot.segment.year,
@@ -323,8 +397,10 @@ class CfeSequentialBillingCalculator:
         dap = subtotal * Decimal("0.05")
 
         logger.info(
-            f"CFE breakdown built: subtotal={subtotal}, iva={iva}, dap={dap}, "
-            f"total={subtotal + iva + dap}"
+            f"CFE breakdown built: subtotal_before_taxes={subtotal}, "
+            f"iva (16%) = {subtotal} × 0.16 = {iva}, "
+            f"dap (5%) = {subtotal} × 0.05 = {dap}, "
+            f"total = {subtotal} + {iva} + {dap} = {subtotal + iva + dap}"
         )
 
         return CfeBillingBreakdownResponse(
