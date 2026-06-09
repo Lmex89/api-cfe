@@ -139,6 +139,12 @@ class BillingService:
             if billing_period_id is not None:
                 bp = self.uow.billing_period_repository.get(billing_period_id)
                 tariff_end = bp.end_date
+                logger.debug(
+                    f"Using billing period end date for tariff calculation: "
+                    f"billing_period_id={billing_period_id}, "
+                    f"reading_end_date={end_date}, "
+                    f"billing_period_end_date={tariff_end}"
+                )
 
             cfe_breakdown = self.tariff_calc.calculate_cost(
                 consumption, active_tariff.tariff_id, start_date, tariff_end
