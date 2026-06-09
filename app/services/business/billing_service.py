@@ -135,8 +135,13 @@ class BillingService:
             household_id, start_date, end_date
         )
         try:
+            tariff_end = end_date
+            if billing_period_id is not None:
+                bp = self.uow.billing_period_repository.get(billing_period_id)
+                tariff_end = bp.end_date
+
             cfe_breakdown = self.tariff_calc.calculate_cost(
-                consumption, active_tariff.tariff_id, start_date, end_date
+                consumption, active_tariff.tariff_id, start_date, tariff_end
             )
         except TariffCalculationError as exc:
             logger.debug(
