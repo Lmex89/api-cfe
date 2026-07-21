@@ -29,6 +29,12 @@ DB:str = os.getenv("DB_NAME")
 
 SECRET_KEY: Secret = os.getenv("SECRET_KEY")
 
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable must be set")
+
+if DEBUG and len(SECRET_KEY) < 64:
+    raise ValueError(f"SECRET_KEY must be at least 64 characters for security, got {len(SECRET_KEY)}")
+
 LOGGING_LEVEL = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(
     handlers=[InterceptHandler(level=LOGGING_LEVEL)], level=LOGGING_LEVEL

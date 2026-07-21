@@ -212,6 +212,26 @@ The system manages the following core domain concepts:
 
 ## Working Rules
 
+### Codegraph (Mandatory First)
+
+**Always use codegraph tools FIRST** for any code exploration, search, or navigation task. Do NOT use `grep`, `read`, or `glob` for code discovery unless codegraph tools cannot satisfy the query.
+
+**Codegraph tools to use first:**
+- `codegraph_find_symbol` — Find exact or fuzzy symbol matches (classes, functions, variables)
+- `codegraph_search_symbols` — Search symbol names, signatures, and docs
+- `codegraph_search_semantic` — Hybrid semantic search (vector + FTS)
+- `codegraph_find_callers` / `codegraph_find_callees` — Trace call relationships
+- `codegraph_trace_dependencies` — Trace transitive dependency chains
+- `codegraph_context_for_task` — Get relevant files/symbols for a task description
+- `codegraph_find_related_tests` — Find tests related to a symbol or file
+- `codegraph_get_impact_radius` — Estimate affected symbols/files around a change
+- `codegraph_find_dead_code` — Find unused symbols
+- `codegraph_graph_analytics` — Run pagerank, coupling, or cycle analysis
+
+**Fallback:** Only use `grep`, `read`, `glob`, or the `explore` subagent if codegraph tools return no results or cannot answer the specific query (e.g., searching raw file content, non-code files, or config values not captured as symbols).
+
+### General Rules
+
 - Use the `docs` subagent for library, API, setup, and configuration questions.
 - Prefer Context7 for current, version-specific documentation instead of relying on model memory.
 - If a task depends on repo code, inspect the local files first and then consult Context7 for external API details.

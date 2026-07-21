@@ -298,7 +298,7 @@ class CfeSequentialBillingCalculator:
                 remaining -= energy
 
                 logger.debug(
-                    f"Tier {level} ({_TIER_NAMES[level]}): all finite slots, "
+                    f"Tier {level} ({                    _TIER_NAMES.get(level, f"Nivel {level}")}): all finite slots, "
                     f"total_cap={total_cap}, requesting={remaining + energy}, "
                     f"filling={energy}, remaining={remaining}"
                 )
@@ -343,7 +343,7 @@ class CfeSequentialBillingCalculator:
                 remaining = Decimal("0")
 
             logger.debug(
-                f"Tier {level} ({_TIER_NAMES[level]}) final: remaining={remaining} kWh"
+                f"Tier {level} ({                    _TIER_NAMES.get(level, f"Nivel {level}")}) final: remaining={remaining} kWh"
             )
 
     @staticmethod
