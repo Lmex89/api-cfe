@@ -26,11 +26,23 @@ from starlette import status
 if TYPE_CHECKING:
     from db.uow import TariffConsumptionUnitofWork
 
-_TIER_NAMES: Dict[int, str] = {
-    1: "Básico",
-    2: "Intermedio",
-    3: "Excedente",
-}
+def _get_tier_names(max_level: int) -> Dict[int, str]:
+    """Return CFE-style tier names based on the number of tariff ranges.
+
+    Last level is always Excedente; middle levels are Intermedio, Intermedio2, etc.
+    Examples:
+      2 levels -> Básico, Excedente
+      3 levels -> Básico, Intermedio, Excedente
+      4 levels -> Básico, Intermedio, Intermedio2, Excedente
+    """
+    if max_level <= 0:
+        return {}
+    names: Dict[int, str] = {1: "Básico"}
+    for level in range(2, max_level):
+        suffix = level - 1
+        names[level] = f"Intermedio{suffix}" if suffix > 1 else "Intermedio"
+    names[max_level] = "Excedente"
+    return names
 
 _SUMMER_START_MONTH = 4
 _SUMMER_END_MONTH = 9
@@ -282,6 +294,8 @@ class CfeSequentialBillingCalculator:
         for slot in slots:
             tier_groups[slot.tier_level].append(slot)
 
+        max_level = max((slot.tier_level for slot in slots), default=0)
+        tier_names = _get_tier_names(max_level)
         remaining = consumption_kwh
 
         for level in sorted(tier_groups.keys()):
@@ -298,7 +312,7 @@ class CfeSequentialBillingCalculator:
                 remaining -= energy
 
                 logger.debug(
-                    f"Tier {level} ({                    _TIER_NAMES.get(level, f"Nivel {level}")}): all finite slots, "
+                    f"Tier {level} ({tier_names.get(level, f'Nivel {level}')}): all finite slots, "
                     f"total_cap={total_cap}, requesting={remaining + energy}, "
                     f"filling={energy}, remaining={remaining}"
                 )
@@ -343,7 +357,7 @@ class CfeSequentialBillingCalculator:
                 remaining = Decimal("0")
 
             logger.debug(
-                f"Tier {level} ({                    _TIER_NAMES.get(level, f"Nivel {level}")}) final: remaining={remaining} kWh"
+                f"Tier {level} ({tier_names.get(level, f'Nivel {level}')}) final: remaining={remaining} kWh"
             )
 
     @staticmethod
@@ -367,13 +381,16 @@ class CfeSequentialBillingCalculator:
         tier_lines: List[CfeTierLineItem] = []
         subtotal = Decimal("0")
 
+        max_level = max((slot.tier_level for slot in slots), default=0)
+        tier_names = _get_tier_names(max_level)
+
         for slot in slots:
             line_subtotal = slot.kwh_charged * slot.price_per_kwh
             subtotal += line_subtotal
 
             logger.debug(
                 f"Line item: seg={slot.segment.year}/{slot.segment.month:02d} "
-                f"tier={slot.tier_level} ({_TIER_NAMES.get(slot.tier_level, '?')}), "
+                f"tier={slot.tier_level} ({tier_names.get(slot.tier_level, '?')}), "
                 f"kwh={slot.kwh_charged} × price={slot.price_per_kwh} = {line_subtotal}"
             )
 
@@ -382,7 +399,7 @@ class CfeSequentialBillingCalculator:
                     segment_year=slot.segment.year,
                     segment_month=slot.segment.month,
                     tier_level=slot.tier_level,
-                    tier_name=_TIER_NAMES.get(slot.tier_level, f"Nivel {slot.tier_level}"),
+                    tier_name=tier_names.get(slot.tier_level, f"Nivel {slot.tier_level}"),
                     days_in_segment=slot.segment.segment_days,
                     prorated_kwh_capacity=(
                         float(slot.capacity) if slot.capacity is not None else None
