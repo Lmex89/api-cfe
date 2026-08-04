@@ -4,3 +4,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Database backups (generated dumps contain sensitive data)
+backups/
+*.sql.gz
