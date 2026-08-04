@@ -3,6 +3,7 @@
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import List
 
 
@@ -30,6 +31,7 @@ class MonthSegment:
     segment_days: int    # days this segment spans within the billing period
     start_date: date
     end_date: date
+    capacity_factor: Decimal = Decimal("1")  # tier-capacity multiplier for this segment
 
 
 def split_by_month_segments(start_date: date, end_date: date) -> List[MonthSegment]:

@@ -171,7 +171,9 @@ class CfeSequentialBillingCalculatorTests(unittest.TestCase):
         may_tier_1 = next(line for line in result.tier_lines if line.tier_level == 1)
         self.assertAlmostEqual(may_tier_1.price_per_kwh, 1.50, places=6)
 
-    def test_single_segment_keeps_sequential_behavior(self):
+    def test_single_segment_doubles_monthly_capacity_for_60day_convention(self):
+        # Ranges store MONTHLY limits; the midpoint path doubles them for the
+        # ~60-day billing period convention (MIDPOINT_PERIOD_FACTOR=2).
         calc = _build_calculator()
 
         result = calc.calculate_cost(
@@ -192,8 +194,25 @@ class CfeSequentialBillingCalculatorTests(unittest.TestCase):
             if line.segment_year == 2026 and line.segment_month == 4 and line.tier_level == 2
         )
 
-        self.assertAlmostEqual(april_tier_1.kwh_charged, 100.0, places=6)
-        self.assertAlmostEqual(april_tier_2.kwh_charged, 50.0, places=6)
+        # Tier 1 monthly limit 100 -> doubled capacity 200 kWh for the period.
+        self.assertAlmostEqual(april_tier_1.kwh_charged, 150.0, places=6)
+        self.assertAlmostEqual(april_tier_2.kwh_charged, 0.0, places=6)
+
+    def test_midpoint_segment_applies_capacity_factor_2(self):
+        calc = _build_calculator()
+
+        segment = calc._build_midpoint_segment(date(2026, 4, 1), date(2026, 4, 30))
+
+        self.assertEqual(segment.capacity_factor, Decimal("2"))
+
+    def test_month_segments_keep_capacity_factor_1(self):
+        from services.business.period_utils import split_by_month_segments
+
+        segments = split_by_month_segments(date(2026, 9, 1), date(2026, 10, 31))
+
+        self.assertEqual([s.month for s in segments], [9, 10])
+        for segment in segments:
+            self.assertEqual(segment.capacity_factor, Decimal("1"))
 
     def test_full_non_summer_period_uses_midpoint_month_pricing_for_all_days(self):
         calc = _build_calculator()

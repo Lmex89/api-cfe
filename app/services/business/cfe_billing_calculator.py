@@ -47,6 +47,13 @@ def _get_tier_names(max_level: int) -> Dict[int, str]:
 _SUMMER_START_MONTH = 4
 _SUMMER_END_MONTH = 9
 
+# Billing periods are bimonthly (~60 days). tariff_ranges store MONTHLY tier
+# limits (as scraped), so single-segment (midpoint) billing — which applies one
+# month's prices to the whole period without monthly scaling — must double the
+# tier capacity to match the 60-day period. Per-month segments keep the stored
+# monthly limits and prorate them by calendar days.
+MIDPOINT_PERIOD_FACTOR = Decimal("2")
+
 
 @dataclass
 class _ProratedSlot:
@@ -183,12 +190,16 @@ class CfeSequentialBillingCalculator:
 
                 if tr.range_max is not None:
                     range_size = tr.range_max - tr.range_min
-                    capacity: Optional[Decimal] = range_size / cal * seg_d
+                    capacity: Optional[Decimal] = (
+                        range_size / cal * seg_d * Decimal(seg.capacity_factor)
+                    )
                     logger.debug(
                         f"Capacity proration: range_min={tr.range_min}, "
                         f"range_max={tr.range_max}, range_size={range_size}, "
                         f"calendar_days={cal}, segment_days={seg_d}, "
-                        f"prorated_capacity={range_size} / {cal} * {seg_d} = {capacity}"
+                        f"capacity_factor={seg.capacity_factor}, "
+                        f"prorated_capacity={range_size} / {cal} * {seg_d} * "
+                        f"{seg.capacity_factor} = {capacity}"
                     )
                 else:
                     capacity = None  # unlimited
@@ -275,7 +286,8 @@ class CfeSequentialBillingCalculator:
         midpoint = midpoint_date(start_date, end_date)
         segment_days = (end_date - start_date).days + 1
         # In single-season midpoint mode, apply midpoint pricing to the whole
-        # period without monthly-capacity scaling.
+        # period without monthly-capacity scaling. Ranges store monthly limits,
+        # so scale them up for the ~60-day billing period convention.
         calendar_days = segment_days
         return MonthSegment(
             year=midpoint.year,
@@ -284,6 +296,7 @@ class CfeSequentialBillingCalculator:
             segment_days=segment_days,
             start_date=start_date,
             end_date=end_date,
+            capacity_factor=MIDPOINT_PERIOD_FACTOR,
         )
 
     def _fill_sequentially(
