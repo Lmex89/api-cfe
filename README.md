@@ -172,7 +172,7 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
 | Meter Readings | `GET /meter-readings`, `POST /meter-readings`, `GET /meter-readings/{id}`, `DELETE /meter-readings/{id}` |
 | Billing Periods | `GET /billing-periods`, `POST /billing-periods`, `GET /billing-periods/{id}`, `DELETE /billing-periods/{id}` |
 | Household Tariffs | `GET /household-tariffs`, `POST /household-tariffs`, `GET /household-tariffs/{id}`, `DELETE /household-tariffs/{id}` |
-| Dashboards | `GET /dashboards/summary`, `GET /dashboards/consumption` |
+| Dashboards (auth-protected) | `GET /dashboards/billing-period/{billing_period_id}`, `GET /dashboards/household/{household_id}/consumption`, `GET /dashboards/household/{household_id}/billing-summary`, `GET /dashboards/household/{household_id}/meter-readings` |
 
 ## Domain Entities
 
@@ -210,6 +210,53 @@ SQLAlchemy mappings are done imperatively in `app/db/orm.py` via `start_mappers(
 - The Dockerfile uses a multi-stage build with Alpine + MariaDB connector for `mysqlclient`
 - Database isolation level is set to `REPEATABLE READ`
 - The `EntityNotFoundException` handler returns HTTP status **420** (non-standard)
+
+## Backup & Restore
+
+Database backup and restore scripts are in `scripts/`:
+
+### Backup
+
+`scripts/backup_db.sh` creates a gzipped MariaDB dump, stores it in `./backups/`, and optionally uploads to Backblaze B2 via `rclone`.
+
+```bash
+./scripts/backup_db.sh [backup_dir] [retention_days]
+```
+
+- Default backup directory: `./backups/`
+- Default retention: 30 days
+- Uploads to B2 bucket/prefix configured in `.env` (`BACK_BLAZE_BUCKET`, `BACK_BLAZE_DIR`)
+- Gracefully skips cloud upload if `rclone` not installed or B2 credentials missing
+
+**Cron setup** (daily at 02:00):
+
+```bash
+./scripts/install-cron.sh          # install cron entry
+./scripts/install-cron.sh --remove # remove cron entry
+```
+
+### Restore
+
+`scripts/restore_db.sh` restores from a gzipped backup file. **This is destructive** — it drops and recreates the database.
+
+```bash
+./scripts/restore_db.sh /path/to/backup.sql.gz
+```
+
+- Stops the `api` container during restore
+- Prompts for confirmation before proceeding
+- Restarts the `api` container and waits for health check
+
+### Environment Variables
+
+Add to `.env` for cloud backup:
+
+| Variable | Description |
+|----------|-------------|
+| `BACK_BLAZE_KEY_ID` | Backblaze B2 application key ID |
+| `BACK_BLAZE_SECRET` | Backblaze B2 application key secret |
+| `BACK_BLAZE_BUCKET` | B2 bucket name (default: `lmex-backups-db`) |
+| `BACK_BLAZE_DIR` | Folder/prefix inside the bucket (default: `api-cfe-db`) |
 
 ## CI/CD
 
