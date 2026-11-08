@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 
 class TariffVersionBase(BaseModel):
     tariff_id: int = Field(gt=0)
-    start_date: date
-    end_date: Optional[date] = None
+    year: int = Field(ge=1900, le=3000)
+    month: int = Field(ge=1, le=12)
 
 
 class TariffVersionCreate(TariffVersionBase):
@@ -15,8 +15,8 @@ class TariffVersionCreate(TariffVersionBase):
 
 
 class TariffVersionUpdate(BaseModel):
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    year: Optional[int] = Field(default=None, ge=1900, le=3000)
+    month: Optional[int] = Field(default=None, ge=1, le=12)
 
 
 class TariffVersionResponse(TariffVersionBase):

@@ -1,16 +1,20 @@
 """Dashboard routes - expose consumption and billing calculations via API."""
 
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.params import Depends
 
 from common.services.auth_dependency import get_current_user
 from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     BillingPeriodCostResponse,
     HouseholdConsumptionDashboardResponse,
+    MeterReadingHistoryDashboardResponse,
     MultiplePeriodsSummaryResponse,
 )
+from services.dashboard_service import DashboardService
 from services.business.billing_service import BillingService, BillingServiceError
 
 router = APIRouter(
@@ -18,6 +22,8 @@ router = APIRouter(
     tags=["dashboards"],
     dependencies=[Depends(get_current_user)],
 )
+
+dashboard_service = DashboardService()
 
 
 @router.get(
@@ -34,7 +40,9 @@ def get_billing_period_dashboard(
         try:
             return service.calculate_billing_period_cost(billing_period_id)
         except BillingServiceError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+            raise HTTPException(
+                status_code=exc.status_code, detail=exc.message
+            ) from exc
 
 
 @router.get(
@@ -60,7 +68,9 @@ def get_household_consumption(
                 household_id, start_date, end_date
             )
         except BillingServiceError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+            raise HTTPException(
+                status_code=exc.status_code, detail=exc.message
+            ) from exc
 
 
 @router.get(
@@ -86,4 +96,30 @@ def get_household_billing_summary(
                 household_id, start_date, end_date
             )
         except BillingServiceError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+            raise HTTPException(
+                status_code=exc.status_code, detail=exc.message
+            ) from exc
+
+
+@router.get(
+    "/household/{household_id}/meter-readings",
+    response_model=MeterReadingHistoryDashboardResponse,
+)
+def get_household_meter_readings_with_history(
+    household_id: int,
+    billing_period_id: Optional[int] = Query(
+        default=None, gt=0, description="Filter by billing period ID"
+    ),
+    start_date: Optional[date] = Query(
+        default=None, description="Period start (YYYY-MM-DD)"
+    ),
+    end_date: Optional[date] = Query(
+        default=None, description="Period end (YYYY-MM-DD)"
+    ),
+) -> MeterReadingHistoryDashboardResponse:
+    return dashboard_service.get_household_meter_readings_with_history(
+        household_id=household_id,
+        billing_period_id=billing_period_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
