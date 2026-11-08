@@ -7,7 +7,8 @@ Usage:
         client.get("/api/v1/households")
 
 - FakeRepository: in-memory store; add() assigns incremental ids.
-  Subclass or monkeypatch for entity-specific queries (e.g. list filters).
+  list() filters by any keyword naming an item attribute; entity-specific
+  queries live in the Fake*Repository subclasses below.
 - FakeUoW: one FakeRepository per attribute of TariffConsumptionUnitofWork.
   Tracks `committed`. Re-entering returns the same instance, so state
   persists between requests and the test can inspect it afterwards.
@@ -63,17 +64,76 @@ class FakeRepository:
     def get(self, id):
         return self.items.get(id)
 
-    def list(self, limit=100, offset=0, **_):
-        return list(self.items.values())[offset : offset + limit]
+    def list(self, limit=100, offset=0, **filters):
+        """Filter by every non-None keyword that names an item attribute."""
+        rows = [
+            i for i in self.items.values()
+            if all(getattr(i, k, None) == v for k, v in filters.items() if v is not None)
+        ]
+        return rows[offset : offset + limit]
+
+    def get_by_code(self, code):
+        return next((i for i in self.items.values() if i.code == code), None)
 
     def delete(self, item):
         self.items.pop(item.id, None)
+
+
+class FakeMeterReadingRepository(FakeRepository):
+    """Adds the date-range queries of the real MeterReadingRepository."""
+
+    def get_by_household_and_date(self, household_id, reading_date):
+        return next(
+            (r for r in self.items.values()
+             if r.household_id == household_id and r.reading_date == reading_date),
+            None,
+        )
+
+    def list(self, household_id=None, reading_date_from=None, reading_date_to=None,
+             limit=100, offset=0, **filters):
+        rows = [
+            r for r in super().list(limit=len(self.items), household_id=household_id, **filters)
+            if (reading_date_from is None or r.reading_date >= reading_date_from)
+            and (reading_date_to is None or r.reading_date <= reading_date_to)
+        ]
+        return sorted(rows, key=lambda r: r.reading_date)[offset : offset + limit]
+
+    def _range(self, household_id, reading_date_from, reading_date_to):
+        return self.list(household_id=household_id, reading_date_from=reading_date_from,
+                         reading_date_to=reading_date_to, limit=10**6)
+
+    def get_first_reading_in_range(self, household_id, reading_date_from, reading_date_to):
+        rows = self._range(household_id, reading_date_from, reading_date_to)
+        return rows[0] if rows else None
+
+    def get_last_reading_in_range(self, household_id, reading_date_from, reading_date_to):
+        rows = self._range(household_id, reading_date_from, reading_date_to)
+        return rows[-1] if rows else None
+
+
+class FakeTariffVersionRepository(FakeRepository):
+    def get_by_tariff_and_period(self, tariff_id, year, month):
+        return next(
+            (v for v in self.items.values()
+             if (v.tariff_id, v.year, v.month) == (tariff_id, year, month)),
+            None,
+        )
+
+    def get_by_tariff_and_period_or_latest_before(self, tariff_id, year, month):
+        """Mimics the real repo: exact month, else latest earlier version."""
+        earlier = [
+            v for v in self.items.values()
+            if v.tariff_id == tariff_id and (v.year, v.month) <= (year, month)
+        ]
+        return max(earlier, key=lambda v: (v.year, v.month), default=None)
 
 
 class FakeUoW:
     def __init__(self):
         for name in _REPOSITORIES:
             setattr(self, name, FakeRepository())
+        self.meter_reading_repository = FakeMeterReadingRepository()
+        self.tariff_version_repository = FakeTariffVersionRepository()
         self.committed = False
 
     def __enter__(self):

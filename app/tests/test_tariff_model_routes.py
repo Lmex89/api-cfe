@@ -1,44 +1,11 @@
 import unittest
 
-from fakes import FakeRepository, FakeUoW, make_client
-
-
-class _TariffRepo(FakeRepository):
-    def get_by_code(self, code):
-        return next((t for t in self.items.values() if t.code == code), None)
-
-
-class _VersionRepo(FakeRepository):
-    def get_by_tariff_and_period(self, tariff_id, year, month):
-        return next(
-            (v for v in self.items.values()
-             if (v.tariff_id, v.year, v.month) == (tariff_id, year, month)),
-            None,
-        )
-
-    def list(self, tariff_id=None, limit=100, offset=0, **_):
-        rows = [v for v in self.items.values() if tariff_id in (None, v.tariff_id)]
-        return rows[offset : offset + limit]
-
-
-class _RangeRepo(FakeRepository):
-    def list(self, tariff_version_id=None, limit=100, offset=0, **_):
-        rows = [r for r in self.items.values()
-                if tariff_version_id in (None, r.tariff_version_id)]
-        return rows[offset : offset + limit]
-
-
-def _uow():
-    uow = FakeUoW()
-    uow.tariff_repository = _TariffRepo()
-    uow.tariff_version_repository = _VersionRepo()
-    uow.tariff_range_repository = _RangeRepo()
-    return uow
+from fakes import FakeUoW, make_client
 
 
 class TarifaRoutesTest(unittest.TestCase):
     def setUp(self):
-        self.uow = _uow()
+        self.uow = FakeUoW()
 
     def test_crear_tarifa_devuelve_201_y_confirma(self):
         with make_client(self.uow) as c:
@@ -96,7 +63,7 @@ class TarifaRoutesTest(unittest.TestCase):
 
 class VersionDeTarifaRoutesTest(unittest.TestCase):
     def setUp(self):
-        self.uow = _uow()
+        self.uow = FakeUoW()
         self.body = {"tariff_id": 1, "year": 2025, "month": 3}
 
     def test_crear_version_devuelve_201(self):
@@ -166,7 +133,7 @@ class VersionDeTarifaRoutesTest(unittest.TestCase):
 
 class RangoRoutesTest(unittest.TestCase):
     def setUp(self):
-        self.uow = _uow()
+        self.uow = FakeUoW()
         self.body = {"tariff_version_id": 1, "range_min": "0", "range_max": "75", "price_per_kwh": "0.9"}
 
     def test_crear_rango_devuelve_201(self):
@@ -217,7 +184,7 @@ class RangoRoutesTest(unittest.TestCase):
 
 class AutenticacionTest(unittest.TestCase):
     def test_rutas_del_modelo_de_tarifas_sin_token_dan_401(self):
-        with make_client(_uow(), user=None) as c:
+        with make_client(FakeUoW(), user=None) as c:
             for p in ("tariffs", "tariff-versions", "tariff-ranges"):
                 self.assertEqual(c.get(f"/api/v1/{p}").status_code, 401, p)
 

@@ -18,7 +18,7 @@ class ErrorDeNegocioTest(unittest.TestCase):
         self.assertIn("details", body)
 
     def test_periodo_inexistente_en_dashboard_propaga_status_del_error_de_negocio(self):
-        # Pins current behavior: BillingService uses 422 (not 404) for a missing Periodo.
+        # BUG (pinned): BillingService uses 422 (not 404) for a missing Periodo.
         with make_client(FakeUoW()) as client:
             r = client.get("/api/v1/dashboards/billing-period/999")
         self.assertEqual(r.status_code, 422)
@@ -65,10 +65,6 @@ class ErrorDeValidacionTest(unittest.TestCase):
         with make_client(FakeUoW()) as client:
             r = client.get("/api/v1/households/abc")
         self.assertEqual(r.status_code, 422)
-
-    def setUp(self):
-        # make_client's `with` never runs its cleanup (instance __exit__), so overrides leak.
-        app.dependency_overrides.clear()
 
     def test_sin_token_responde_401_con_formato_consistente(self):
         with make_client(FakeUoW(), user=None) as client:

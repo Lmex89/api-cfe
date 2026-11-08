@@ -1,7 +1,6 @@
 import unittest
 
 from fakes import FakeUoW, make_client
-from main import app
 
 URL = "/api/v1/billing-periods"
 
@@ -41,9 +40,6 @@ class CrearPeriodoTest(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
 
     def test_requiere_autenticacion(self):
-        # make_client's `with` exit never runs its cleanup (instance __exit__ is
-        # ignored by Python), so earlier overrides leak; clear them explicitly.
-        app.dependency_overrides.clear()
         with make_client(FakeUoW(), user=None) as client:
             response = client.post(URL, json=periodo())
         self.assertEqual(response.status_code, 401)
@@ -78,11 +74,13 @@ class PeriodoValidacionesPendientesTest(unittest.TestCase):
     de la misma vivienda. Si se corrige, invertir estas pruebas a 4xx.
     """
 
+    # BUG (pinned): end < start is accepted.
     def test_acepta_periodo_con_fin_anterior_al_inicio_BUG(self):
         with make_client(FakeUoW()) as client:
             response = client.post(URL, json=periodo(start="2024-03-01", end="2024-01-01"))
         self.assertEqual(response.status_code, 201)
 
+    # BUG (pinned): overlapping Periodos of one household are accepted.
     def test_acepta_periodos_traslapados_en_la_misma_vivienda_BUG(self):
         uow = FakeUoW()
         with make_client(uow) as client:
@@ -91,6 +89,7 @@ class PeriodoValidacionesPendientesTest(unittest.TestCase):
         self.assertEqual((first.status_code, second.status_code), (201, 201))
         self.assertEqual(len(uow.billing_period_repository.items), 2)
 
+    # BUG (pinned): updating end < start is accepted.
     def test_actualizar_fin_anterior_al_inicio_se_acepta_BUG(self):
         with make_client(FakeUoW()) as client:
             client.post(URL, json=periodo())

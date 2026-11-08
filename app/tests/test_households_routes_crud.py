@@ -1,17 +1,12 @@
 import unittest
 
 from model.domain.household_model import Household
-from main import app
 from fakes import FakeUoW, make_client
 
 
 class ViviendaCrudTest(unittest.TestCase):
     def setUp(self):
         self.uow = FakeUoW()
-        # make_client's __exit__ is set on the instance, so `with` never runs it
-        # and dependency_overrides leak between tests; reset them here.
-        app.dependency_overrides.clear()
-        self.addCleanup(app.dependency_overrides.clear)
 
     def test_crea_una_vivienda(self):
         with make_client(self.uow) as client:
