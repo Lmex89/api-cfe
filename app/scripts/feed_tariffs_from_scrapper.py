@@ -6,7 +6,7 @@ selected tariffs/months.
 
 Stores MONTHLY tier limits exactly as scraped (max_kwh per calendar month); the
 billing calculator applies the 60-day midpoint doubling itself (see
-services/business/cfe_billing_calculator.py, MIDPOINT_PERIOD_FACTOR). The feed is
+services/business/costo_total.py, MIDPOINT_PERIOD_FACTOR). The feed is
 idempotent: only missing (tariff, year, month) combos are created unless
 --overwrite is passed.
 

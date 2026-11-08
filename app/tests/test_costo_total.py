@@ -192,5 +192,16 @@ class DomainErrorTests(unittest.TestCase):
             CostoTotal(cat).calculate(D(1), 1, date(2026, 4, 1), date(2026, 5, 31))
 
 
+class PeriodoReadOnceTests(unittest.TestCase):
+    def test_a_periodo_is_read_once_per_calculation(self):
+        cat = _catalog()
+        cat.periodos[7] = BillingPeriod(1, date(2026, 4, 1), date(2026, 5, 31))
+        reads = []
+        original = cat.periodo
+        cat.periodo = lambda pid: (reads.append(pid), original(pid))[1]
+        CostoTotal(cat).calculate(D(100), 1, date(2026, 4, 1), date(2026, 4, 10), 7)
+        self.assertEqual(reads, [7])
+
+
 if __name__ == "__main__":
     unittest.main()

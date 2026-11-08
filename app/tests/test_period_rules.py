@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 import unittest
 
-from services.business import cfe_billing_calculator as calc
+from services.business import costo_total as calc
 from services.business.period_utils import (
     first_day_of_month,
     last_day_of_month,
@@ -81,7 +81,7 @@ class ConstantesDeReglasTest(unittest.TestCase):
         self.assertEqual(calc.MIDPOINT_PERIOD_FACTOR, Decimal("2"))
 
     def test_verano_es_de_abril_a_septiembre(self):
-        summer = [m for m in range(1, 13) if calc.CfeSequentialBillingCalculator._is_summer_month(m)]
+        summer = list(calc._SUMMER_MONTHS)
         self.assertEqual(summer, [4, 5, 6, 7, 8, 9])
 
 

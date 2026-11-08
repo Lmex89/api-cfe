@@ -44,3 +44,11 @@ _Avoid_: subtotal, precio, base
 **Costo total**:
 El monto final a pagar. Es el costo base más IVA (16%) y DAP (5%).
 _Avoid_: total, factura, monto a pagar
+
+**Fecha efectiva**:
+La fecha que decide qué asignación y qué versión de tarifa aplican a un cálculo: el punto medio entre el inicio y el fin del periodo (con periodo, se usa su fin).
+_Avoid_: fecha de cálculo, fecha de corte
+
+**Segmento**:
+Una porción del periodo que se cobra con los rangos de un solo mes. Un periodo en una sola temporada es un segmento; uno que cruza temporada con al menos 15 días en cada lado se divide por mes y se prorratea por días.
+_Avoid_: tramo, slot, bloque

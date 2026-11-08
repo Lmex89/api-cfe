@@ -47,10 +47,10 @@ app/
     tariffs.py
   services/            # Application/business logic handlers
     business/          # Business-specific calculation services
-      billing_service.py        # Billing cost calculation
-      cfe_billing_calculator.py # CFE tier-based kWh calculator
+      billing_service.py        # Billing cost responses
+      costo_total.py            # Costo total (tier pricing, segments, taxes)
+      costo_total_catalog.py    # Tariff catalog adapters
       period_utils.py           # Billing period utilities
-      tariff_calculator.py      # Tariff range application
 Dockerfile
 docker-compose.yaml
 ```

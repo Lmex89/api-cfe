@@ -10,9 +10,7 @@ from model.dashboard_serializers import (
     CfeTierLineItem,
     BillingPeriodCostResponse,
     DateRangeResponse,
-    HouseholdConsumptionDashboardResponse,
     HouseholdResponse,
-    MeterReadingPointResponse,
     MultiplePeriodsSummaryResponse,
 )
 from services.business import MeterReadingConsumptionCalculator
@@ -50,10 +48,6 @@ class BillingService:
         )
         self.costo_total = costo_total or CostoTotal(UowTariffCatalog(uow))
         logger.info("BillingService initialized")
-        logger.debug(
-            f"BillingService dependencies: consumption_calc={type(self.consumption_calc).__name__}, "
-            f"costo_total={type(self.costo_total).__name__}"
-        )
 
     def calculate_billing_period_cost(
         self, billing_period_id: int
@@ -63,11 +57,6 @@ class BillingService:
             f"Calculating billing period cost for billing_period_id={billing_period_id}"
         )
         bp: BillingPeriod = self.uow.billing_period_repository.get(billing_period_id)
-        logger.debug(
-            f"Fetched billing period: billing_period_id={billing_period_id}, "
-            f"household_id={bp.household_id if bp else 'N/A'}, "
-            f"start_date={bp.start_date if bp else 'N/A'}, end_date={bp.end_date if bp else 'N/A'}"
-        )
         if not bp:
             logger.debug(
                 f"Billing period not found: billing_period_id={billing_period_id}"
@@ -166,53 +155,6 @@ class BillingService:
             if consumption_value > 0
             else 0,
             cfe_breakdown=cfe_breakdown,
-        )
-
-    def get_household_consumption_dashboard(
-        self, household_id: int, start_date: date, end_date: date
-    ) -> HouseholdConsumptionDashboardResponse:
-        """Multi-period consumption dashboard for single household."""
-        logger.info(
-            f"Building household dashboard for household_id={household_id}, start_date={start_date}, end_date={end_date}"
-        )
-        household = self.uow.household_repository.get(household_id)
-        if not household:
-            logger.debug(f"Household not found: household_id={household_id}")
-            raise BillingServiceError(
-                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
-
-        readings_raw = self.consumption_calc.get_readings_in_range(
-            household_id, start_date, end_date
-        )
-        total_consumption = self.consumption_calc.calculate_total(
-            household_id, start_date, end_date
-        )
-        avg_daily = self.consumption_calc.calculate_average_daily(
-            household_id, start_date, end_date
-        )
-
-        readings = [
-            MeterReadingPointResponse(
-                date=date.fromisoformat(item["date"]),
-                reading_kwh=float(item["reading_kwh"]),
-                is_initial=bool(item["is_initial"]),
-            )
-            for item in readings_raw
-        ]
-        logger.debug(
-            f"Dashboard metrics: household_id={household_id}, readings={len(readings)}, "
-            f"total_consumption={total_consumption}, avg_daily={avg_daily}"
-        )
-        logger.info(f"Household dashboard generated for household_id={household_id}")
-
-        return HouseholdConsumptionDashboardResponse(
-            household=HouseholdResponse(id=household.id, name=household.name),
-            period=DateRangeResponse(start=start_date, end=end_date),
-            total_consumption_kwh=float(total_consumption),
-            average_daily_kwh=float(avg_daily),
-            number_of_readings=len(readings),
-            readings=readings,
         )
 
     def get_multiple_periods_summary(
