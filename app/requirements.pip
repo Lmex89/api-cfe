@@ -11,3 +11,4 @@ uvicorn
 mysqlclient
 requests
 python-dotenv
+httpx  # dev: required by fastapi TestClient (tests only)
