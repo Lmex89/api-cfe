@@ -4,20 +4,18 @@ from datetime import date
 from typing import Optional
 
 from loguru import logger
-from common.api.errors.business_error import TariffCalculationError
 from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
-    ActiveTariffResponse,
+    CfeBillingBreakdownResponse,
+    CfeTierLineItem,
     BillingPeriodCostResponse,
     DateRangeResponse,
-    HouseholdConsumptionDashboardResponse,
     HouseholdResponse,
-    MeterReadingPointResponse,
     MultiplePeriodsSummaryResponse,
 )
 from services.business import MeterReadingConsumptionCalculator
-from services.business.cfe_billing_calculator import CfeSequentialBillingCalculator
-from services.business.period_utils import midpoint_date
+from services.business.costo_total import CostoTotal, CostoTotalError
+from services.business.costo_total_catalog import UowTariffCatalog
 
 from starlette import status
 from model.domain.billing_period_model import BillingPeriod
@@ -42,18 +40,14 @@ class BillingService:
         self,
         uow: TariffConsumptionUnitofWork,
         consumption_calc: Optional[MeterReadingConsumptionCalculator] = None,
-        tariff_calc: Optional[CfeSequentialBillingCalculator] = None,
+        costo_total: Optional[CostoTotal] = None,
     ):
         self.uow = uow
         self.consumption_calc = consumption_calc or MeterReadingConsumptionCalculator(
             uow
         )
-        self.tariff_calc = tariff_calc or CfeSequentialBillingCalculator(uow)
+        self.costo_total = costo_total or CostoTotal(UowTariffCatalog(uow))
         logger.info("BillingService initialized")
-        logger.debug(
-            f"BillingService dependencies: consumption_calc={type(self.consumption_calc).__name__}, "
-            f"tariff_calc={type(self.tariff_calc).__name__}"
-        )
 
     def calculate_billing_period_cost(
         self, billing_period_id: int
@@ -63,11 +57,6 @@ class BillingService:
             f"Calculating billing period cost for billing_period_id={billing_period_id}"
         )
         bp: BillingPeriod = self.uow.billing_period_repository.get(billing_period_id)
-        logger.debug(
-            f"Fetched billing period: billing_period_id={billing_period_id}, "
-            f"household_id={bp.household_id if bp else 'N/A'}, "
-            f"start_date={bp.start_date if bp else 'N/A'}, end_date={bp.end_date if bp else 'N/A'}"
-        )
         if not bp:
             logger.debug(
                 f"Billing period not found: billing_period_id={billing_period_id}"
@@ -76,11 +65,9 @@ class BillingService:
                 "Billing period not found", status.HTTP_422_UNPROCESSABLE_CONTENT
             )
 
-        return self.calculate_cost_for_date_range(
-            household_id=bp.household_id,
-            start_date=bp.start_date,
-            end_date=bp.end_date,
-            billing_period_id=billing_period_id,
+        # Periodo already read here: its end date is passed as the range end.
+        return self._calculate(
+            bp.household_id, bp.start_date, bp.end_date, billing_period_id, None
         )
 
     def calculate_cost_for_date_range(
@@ -91,86 +78,64 @@ class BillingService:
         billing_period_id: Optional[int] = None,
     ) -> BillingPeriodCostResponse:
         """Calculate consumption and tariff cost for any household date range."""
-        logger.info(
-            f"Calculating date range cost for household_id={household_id}, start_date={start_date}, end_date={end_date}, billing_period_id={billing_period_id}"
+        return self._calculate(
+            household_id, start_date, end_date, billing_period_id, billing_period_id
         )
 
+    def _calculate(
+        self,
+        household_id: int,
+        start_date: date,
+        end_date: date,
+        billing_period_id: Optional[int],
+        periodo_id: Optional[int],
+    ) -> BillingPeriodCostResponse:
         household = self.uow.household_repository.get(household_id)
-        logger.debug(
-            f"Fetched household for cost calculation: household_id={household_id}, billing_period_id={billing_period_id}"
-        )
         if not household:
-            logger.debug(f"Household not found: household_id={household_id}")
             raise BillingServiceError(
                 "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
             )
-        if billing_period_id is None:
-            logger.debug(
-                f"No billing_period_id provided, using date range midpoint for tariff lookup: household_id={household_id}, start_date={start_date}, end_date={end_date}"
-            )
-            effective_date = midpoint_date(start_date, end_date)
-        else:
-            logger.debug(
-                f"Billing_period_id provided, using midpoint between start_date and billing period end date for tariff lookup: household_id={household_id}, billing_period_id={billing_period_id}"
-            )
-            effective_date = midpoint_date(
-                start_date,
-                self.uow.billing_period_repository.get(billing_period_id).end_date,
-            )
-        logger.debug(
-            f"Effective date for tariff lookup: household_id={household_id}, billing_period_id={billing_period_id}, effective_date={effective_date}"
-        )
-
-        active_tariff = self._get_active_tariff(household_id, effective_date)
-        if not active_tariff:
-            logger.debug(
-                f"No active tariff found for household_id={household_id}, effective_date={effective_date}"
-            )
-            raise BillingServiceError(
-                "No active tariff for this period",
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-            )
-
         consumption = self.consumption_calc.calculate_total(
             household_id, start_date, end_date
         )
         try:
-            tariff_end = end_date
-            if billing_period_id is not None:
-                bp = self.uow.billing_period_repository.get(billing_period_id)
-                tariff_end = bp.end_date
-                logger.debug(
-                    f"Using billing period end date for tariff calculation: "
-                    f"billing_period_id={billing_period_id}, "
-                    f"reading_end_date={end_date}, "
-                    f"billing_period_end_date={tariff_end}"
-                )
-
-            cfe_breakdown = self.tariff_calc.calculate_cost(
-                consumption, active_tariff.tariff_id, start_date, tariff_end
+            d = self.costo_total.calculate(
+                consumption, household_id, start_date, end_date, periodo_id
             )
-        except TariffCalculationError as exc:
-            logger.debug(
-                f"Tariff calculation failed for household_id={household_id}, billing_period_id={billing_period_id}: {exc.message}"
-            )
-            raise BillingServiceError(exc.message, exc.status_code) from exc
-
-        base_cost = cfe_breakdown.subtotal_before_taxes
-        iva = cfe_breakdown.iva
-        dap = cfe_breakdown.dap
+        except CostoTotalError as exc:
+            raise BillingServiceError(
+                str(exc), status.HTTP_422_UNPROCESSABLE_CONTENT
+            ) from exc
 
         avg_daily = self.consumption_calc.calculate_average_daily(
             household_id, start_date, end_date
         )
-        logger.debug(
-            f"Billing period metrics: consumption={consumption}, avg_daily={avg_daily}, "
-            f"base_cost={base_cost}, iva={iva}, dap={dap}"
-        )
-        logger.info(
-            f"Calculated cost for household_id={household_id}, billing_period_id={billing_period_id}, "
-            f"total_cost={iva + base_cost + dap}"
-        )
+        base_cost, iva, dap = d.costo_base, d.iva, d.dap
         consumption_value = float(consumption)
+        cfe_breakdown = CfeBillingBreakdownResponse(
+            tier_lines=[
+                CfeTierLineItem(
+                    segment_year=r.segment_year,
+                    segment_month=r.segment_month,
+                    tier_level=r.tier_level,
+                    tier_name=r.tier_name,
+                    days_in_segment=r.days_in_segment,
+                    prorated_kwh_capacity=(
+                        float(r.prorated_kwh_capacity)
+                        if r.prorated_kwh_capacity is not None
+                        else None
+                    ),
+                    kwh_charged=float(r.kwh_charged),
+                    price_per_kwh=float(r.price_per_kwh),
+                    subtotal=float(r.subtotal),
+                )
+                for r in d.renglones
+            ],
+            subtotal_before_taxes=float(base_cost),
+            iva=float(iva),
+            dap=float(dap),
+            total=float(d.costo_total),
+        )
 
         return BillingPeriodCostResponse(
             billing_period_id=billing_period_id,
@@ -180,63 +145,14 @@ class BillingService:
             period_end=end_date,
             total_consumption_kwh=consumption_value,
             average_daily_kwh=float(avg_daily),
-            tariff_code=active_tariff.code,
+            tariff_code=d.tariff_code,
             total_cost_witout_taxes=float(base_cost),
             iva=float(iva),
             total_cost_with_iva=float(iva + base_cost),
             dap=float(dap),
-            total_cost=float(iva + base_cost + dap),
-            cost_per_kwh=(float(base_cost) / consumption_value)
-            if consumption_value > 0
-            else 0,
+            total_cost=float(d.costo_total),
+            cost_per_kwh=float(d.cost_per_kwh),
             cfe_breakdown=cfe_breakdown,
-        )
-
-    def get_household_consumption_dashboard(
-        self, household_id: int, start_date: date, end_date: date
-    ) -> HouseholdConsumptionDashboardResponse:
-        """Multi-period consumption dashboard for single household."""
-        logger.info(
-            f"Building household dashboard for household_id={household_id}, start_date={start_date}, end_date={end_date}"
-        )
-        household = self.uow.household_repository.get(household_id)
-        if not household:
-            logger.debug(f"Household not found: household_id={household_id}")
-            raise BillingServiceError(
-                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
-
-        readings_raw = self.consumption_calc.get_readings_in_range(
-            household_id, start_date, end_date
-        )
-        total_consumption = self.consumption_calc.calculate_total(
-            household_id, start_date, end_date
-        )
-        avg_daily = self.consumption_calc.calculate_average_daily(
-            household_id, start_date, end_date
-        )
-
-        readings = [
-            MeterReadingPointResponse(
-                date=date.fromisoformat(item["date"]),
-                reading_kwh=float(item["reading_kwh"]),
-                is_initial=bool(item["is_initial"]),
-            )
-            for item in readings_raw
-        ]
-        logger.debug(
-            f"Dashboard metrics: household_id={household_id}, readings={len(readings)}, "
-            f"total_consumption={total_consumption}, avg_daily={avg_daily}"
-        )
-        logger.info(f"Household dashboard generated for household_id={household_id}")
-
-        return HouseholdConsumptionDashboardResponse(
-            household=HouseholdResponse(id=household.id, name=household.name),
-            period=DateRangeResponse(start=start_date, end=end_date),
-            total_consumption_kwh=float(total_consumption),
-            average_daily_kwh=float(avg_daily),
-            number_of_readings=len(readings),
-            readings=readings,
         )
 
     def get_multiple_periods_summary(
@@ -292,55 +208,3 @@ class BillingService:
             total_cost=float(total_cost),
             periods=period_summaries,
         )
-
-    def _get_active_tariff(
-        self, household_id: int, effective_date: date
-    ) -> Optional[ActiveTariffResponse]:
-        """
-        LSP: Liskov Substitution Principle
-        Extract active tariff lookup to avoid duplicating in calc methods.
-        """
-        hts = self.uow.household_tariff_repository.list(
-            household_id=household_id, limit=1000
-        )
-        if not hts:
-            logger.debug(
-                f"No household tariffs found: household_id={household_id}, effective_date={effective_date}"
-            )
-            return None
-
-        target_year = effective_date.year
-        target_month = effective_date.month
-
-        for ht in reversed(hts):
-            if ht.start_date <= effective_date and (
-                ht.end_date is None or ht.end_date >= effective_date
-            ):
-                tariff = self.uow.tariff_repository.get(ht.tariff_id)
-                if not tariff:
-                    continue
-
-                # Keep tariff selection aligned with month-based tariff versions.
-                tariff_version = (
-                    self.uow.tariff_version_repository.get_by_tariff_and_period_or_latest_before(
-                        ht.tariff_id, target_year, target_month
-                    )
-                )
-                if not tariff_version:
-                    logger.debug(
-                        f"Skipping tariff without monthly version: household_id={household_id}, tariff_id={ht.tariff_id}, "
-                        f"year={target_year}, month={target_month}"
-                    )
-                    continue
-
-                logger.debug(
-                    f"Active tariff found: household_id={household_id}, tariff_id={ht.tariff_id}, code={tariff.code}, "
-                    f"year={target_year}, month={target_month}, version_id={tariff_version.id}, "
-                    f"version_year={tariff_version.year}, version_month={tariff_version.month}"
-                )
-                return ActiveTariffResponse(tariff_id=ht.tariff_id, code=tariff.code)
-
-        logger.debug(
-            f"No active tariff matched effective date: household_id={household_id}, effective_date={effective_date}"
-        )
-        return None

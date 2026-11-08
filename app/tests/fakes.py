@@ -102,6 +102,9 @@ class FakeMeterReadingRepository(FakeRepository):
         return self.list(household_id=household_id, reading_date_from=reading_date_from,
                          reading_date_to=reading_date_to, limit=10**6)
 
+    def get_by_billing_period_and_date_range(self, household_id, reading_date_from, reading_date_to):
+        return self._range(household_id, reading_date_from, reading_date_to)
+
     def get_first_reading_in_range(self, household_id, reading_date_from, reading_date_to):
         rows = self._range(household_id, reading_date_from, reading_date_to)
         return rows[0] if rows else None

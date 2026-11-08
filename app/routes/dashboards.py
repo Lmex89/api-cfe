@@ -61,16 +61,12 @@ def get_household_consumption(
             detail="start_date must be before end_date",
         )
 
-    with TariffConsumptionUnitofWork() as uow:
-        service = BillingService(uow)
-        try:
-            return service.get_household_consumption_dashboard(
-                household_id, start_date, end_date
-            )
-        except BillingServiceError as exc:
-            raise HTTPException(
-                status_code=exc.status_code, detail=exc.message
-            ) from exc
+    try:
+        return DashboardService(
+            TariffConsumptionUnitofWork
+        ).get_household_consumption_dashboard(household_id, start_date, end_date)
+    except BillingServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
 @router.get(

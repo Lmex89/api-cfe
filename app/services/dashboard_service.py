@@ -16,7 +16,9 @@ from model.dashboard_serializers import (
     BillingPeriodCostResponse,
     BillingPeriodInfoResponse,
     DateRangeResponse,
+    HouseholdConsumptionDashboardResponse,
     HouseholdResponse,
+    MeterReadingPointResponse,
     MeterReadingHistoryDashboardResponse,
     MeterReadingWithHistoryResponse,
 )
@@ -24,6 +26,7 @@ from model.domain.billing_period_model import BillingPeriod
 from model.domain.household_model import Household
 from model.domain.meter_reading_model import MeterReading
 from services.business.billing_service import BillingService, BillingServiceError
+from services.business import MeterReadingConsumptionCalculator
 
 
 class DashboardService:
@@ -31,6 +34,58 @@ class DashboardService:
 
     def __init__(self, uow_factory=TariffConsumptionUnitofWork) -> None:
         self._uow_factory = uow_factory
+
+    def get_household_consumption_dashboard(
+        self, household_id: int, start_date: date, end_date: date
+    ) -> HouseholdConsumptionDashboardResponse:
+        """Multi-period consumption dashboard for single household."""
+        with self._uow_factory() as uow:
+            return self._consumption_dashboard(uow, household_id, start_date, end_date)
+
+    def _consumption_dashboard(self, uow, household_id, start_date, end_date):
+        calc = MeterReadingConsumptionCalculator(uow)
+        logger.info(
+            f"Building household dashboard for household_id={household_id}, start_date={start_date}, end_date={end_date}"
+        )
+        household = uow.household_repository.get(household_id)
+        if not household:
+            logger.debug(f"Household not found: household_id={household_id}")
+            raise BillingServiceError(
+                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
+            )
+
+        readings_raw = calc.get_readings_in_range(
+            household_id, start_date, end_date
+        )
+        total_consumption = calc.calculate_total(
+            household_id, start_date, end_date
+        )
+        avg_daily = calc.calculate_average_daily(
+            household_id, start_date, end_date
+        )
+
+        readings = [
+            MeterReadingPointResponse(
+                date=date.fromisoformat(item["date"]),
+                reading_kwh=float(item["reading_kwh"]),
+                is_initial=bool(item["is_initial"]),
+            )
+            for item in readings_raw
+        ]
+        logger.debug(
+            f"Dashboard metrics: household_id={household_id}, readings={len(readings)}, "
+            f"total_consumption={total_consumption}, avg_daily={avg_daily}"
+        )
+        logger.info(f"Household dashboard generated for household_id={household_id}")
+
+        return HouseholdConsumptionDashboardResponse(
+            household=HouseholdResponse(id=household.id, name=household.name),
+            period=DateRangeResponse(start=start_date, end=end_date),
+            total_consumption_kwh=float(total_consumption),
+            average_daily_kwh=float(avg_daily),
+            number_of_readings=len(readings),
+            readings=readings,
+        )
 
     def get_household_meter_readings_with_history(
         self,
@@ -52,7 +107,6 @@ class DashboardService:
         self._validate_meter_reading_filters(filters)
 
         with self._uow_factory() as uow:
-            billing_service = BillingService(uow)
             household = self._get_household_or_404(uow, household_id)
             resolved_query = self._resolve_meter_reading_query(
                 uow=uow,
@@ -76,7 +130,7 @@ class DashboardService:
                 self._build_meter_reading_history(
                     readings=readings,
                     household_id=household_id,
-                    billing_service=billing_service,
+                    uow=uow,
                     resolved_query=resolved_query,
                 )
             )
@@ -198,7 +252,7 @@ class DashboardService:
         self,
         readings: List[MeterReading],
         household_id: int,
-        billing_service: BillingService,
+        uow: TariffConsumptionUnitofWork,
         resolved_query: ResolvedMeterReadingQuery,
     ) -> tuple[List[MeterReadingWithHistoryResponse], float]:
         """Transform raw readings into dashboard rows and aggregate consumption."""
@@ -230,7 +284,7 @@ class DashboardService:
                 current_reading=reading,
                 previous_reading=previous_reading,
                 household_id=household_id,
-                billing_service=billing_service,
+                uow=uow,
                 billing_period=resolved_query.billing_period,
             )
             total_consumption += interval.consumption_for_total
@@ -256,7 +310,7 @@ class DashboardService:
         current_reading: MeterReading,
         previous_reading: Optional[MeterReading],
         household_id: int,
-        billing_service: BillingService,
+        uow: TariffConsumptionUnitofWork,
         billing_period: Optional[BillingPeriod],
     ) -> IntervalDetails:
         """Compute row metrics and cumulative pricing from the first reading to the current one."""
@@ -269,7 +323,7 @@ class DashboardService:
             household_id=household_id,
             start_date=first_reading.reading_date,
             end_date=current_reading.reading_date,
-            billing_service=billing_service,
+            uow=uow,
             billing_period=billing_period,
         )
 
@@ -324,7 +378,7 @@ class DashboardService:
         household_id: int,
         start_date: date,
         end_date: date,
-        billing_service: BillingService,
+        uow: TariffConsumptionUnitofWork,
         billing_period: Optional[BillingPeriod],
     ) -> Optional[BillingPeriodCostResponse]:
         """Calculate tariff cost for a single interval, tolerating missing tariff data."""
@@ -333,11 +387,11 @@ class DashboardService:
                 f"Calculating interval cost: household_id={household_id}, start_date={start_date}, end_date={end_date}, "
                 f"billing_period_id={billing_period.id if billing_period else 'N/A'}"
             )
-            cost = billing_service.calculate_cost_for_date_range(
-                household_id=household_id,
-                start_date=start_date,
-                end_date=end_date,
-                billing_period_id=billing_period.id if billing_period else None,
+            cost = BillingService(uow).calculate_cost_for_date_range(
+                household_id,
+                start_date,
+                end_date,
+                billing_period.id if billing_period else None,
             )
             logger.debug(
                 f"Calculated interval cost: household_id={household_id}, start_date={start_date}, "
@@ -347,7 +401,7 @@ class DashboardService:
         except BillingServiceError as exc:
             logger.warning(
                 f"Unable to calculate interval cost: household_id={household_id}, start_date={start_date}, "
-                f"end_date={end_date}, billing_period_id={billing_period.id if billing_period else 'N/A'}, reason={exc.message}"
+                f"end_date={end_date}, billing_period_id={billing_period.id if billing_period else 'N/A'}, reason={exc}"
             )
             return None
 
