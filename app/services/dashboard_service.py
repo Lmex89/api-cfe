@@ -15,6 +15,8 @@ from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     BillingPeriodCostResponse,
     BillingPeriodInfoResponse,
+    CfeBillingBreakdownResponse,
+    CfeTierLineItem,
     DateRangeResponse,
     HouseholdResponse,
     MeterReadingHistoryDashboardResponse,
@@ -23,7 +25,9 @@ from model.dashboard_serializers import (
 from model.domain.billing_period_model import BillingPeriod
 from model.domain.household_model import Household
 from model.domain.meter_reading_model import MeterReading
-from services.business.billing_service import BillingService, BillingServiceError
+from services.business import MeterReadingConsumptionCalculator
+from services.business.costo_total import CostoTotal, CostoTotalError, Desglose
+from services.business.costo_total_catalog import UowTariffCatalog
 
 
 class DashboardService:
@@ -52,7 +56,6 @@ class DashboardService:
         self._validate_meter_reading_filters(filters)
 
         with self._uow_factory() as uow:
-            billing_service = BillingService(uow)
             household = self._get_household_or_404(uow, household_id)
             resolved_query = self._resolve_meter_reading_query(
                 uow=uow,
@@ -76,7 +79,7 @@ class DashboardService:
                 self._build_meter_reading_history(
                     readings=readings,
                     household_id=household_id,
-                    billing_service=billing_service,
+                    uow=uow,
                     resolved_query=resolved_query,
                 )
             )
@@ -198,7 +201,7 @@ class DashboardService:
         self,
         readings: List[MeterReading],
         household_id: int,
-        billing_service: BillingService,
+        uow: TariffConsumptionUnitofWork,
         resolved_query: ResolvedMeterReadingQuery,
     ) -> tuple[List[MeterReadingWithHistoryResponse], float]:
         """Transform raw readings into dashboard rows and aggregate consumption."""
@@ -230,7 +233,7 @@ class DashboardService:
                 current_reading=reading,
                 previous_reading=previous_reading,
                 household_id=household_id,
-                billing_service=billing_service,
+                uow=uow,
                 billing_period=resolved_query.billing_period,
             )
             total_consumption += interval.consumption_for_total
@@ -256,7 +259,7 @@ class DashboardService:
         current_reading: MeterReading,
         previous_reading: Optional[MeterReading],
         household_id: int,
-        billing_service: BillingService,
+        uow: TariffConsumptionUnitofWork,
         billing_period: Optional[BillingPeriod],
     ) -> IntervalDetails:
         """Compute row metrics and cumulative pricing from the first reading to the current one."""
@@ -269,7 +272,7 @@ class DashboardService:
             household_id=household_id,
             start_date=first_reading.reading_date,
             end_date=current_reading.reading_date,
-            billing_service=billing_service,
+            uow=uow,
             billing_period=billing_period,
         )
 
@@ -324,7 +327,7 @@ class DashboardService:
         household_id: int,
         start_date: date,
         end_date: date,
-        billing_service: BillingService,
+        uow: TariffConsumptionUnitofWork,
         billing_period: Optional[BillingPeriod],
     ) -> Optional[BillingPeriodCostResponse]:
         """Calculate tariff cost for a single interval, tolerating missing tariff data."""
@@ -333,23 +336,81 @@ class DashboardService:
                 f"Calculating interval cost: household_id={household_id}, start_date={start_date}, end_date={end_date}, "
                 f"billing_period_id={billing_period.id if billing_period else 'N/A'}"
             )
-            cost = billing_service.calculate_cost_for_date_range(
-                household_id=household_id,
-                start_date=start_date,
-                end_date=end_date,
-                billing_period_id=billing_period.id if billing_period else None,
+            consumption_calc = MeterReadingConsumptionCalculator(uow)
+            consumo = consumption_calc.calculate_total(household_id, start_date, end_date)
+            d = CostoTotal(UowTariffCatalog(uow)).calculate(
+                consumo,
+                household_id,
+                start_date,
+                end_date,
+                periodo_id=billing_period.id if billing_period else None,
+            )
+            cost = self._to_cost_response(
+                d,
+                uow.household_repository.get(household_id).name,
+                household_id,
+                start_date,
+                end_date,
+                billing_period.id if billing_period else None,
+                consumo,
+                consumption_calc.calculate_average_daily(household_id, start_date, end_date),
             )
             logger.debug(
                 f"Calculated interval cost: household_id={household_id}, start_date={start_date}, "
                 f"end_date={end_date}, total_cost={cost.total_cost}"
             )
             return cost
-        except BillingServiceError as exc:
+        except CostoTotalError as exc:
             logger.warning(
                 f"Unable to calculate interval cost: household_id={household_id}, start_date={start_date}, "
-                f"end_date={end_date}, billing_period_id={billing_period.id if billing_period else 'N/A'}, reason={exc.message}"
+                f"end_date={end_date}, billing_period_id={billing_period.id if billing_period else 'N/A'}, reason={exc}"
             )
             return None
+
+    @staticmethod
+    def _to_cost_response(
+        d: Desglose, name, household_id, start, end, periodo_id, consumo, avg_daily
+    ) -> BillingPeriodCostResponse:
+        """Float conversion happens only here."""
+        kwh = float(consumo)
+        return BillingPeriodCostResponse(
+            billing_period_id=periodo_id,
+            household_id=household_id,
+            household_name=name,
+            period_start=start,
+            period_end=end,
+            total_consumption_kwh=kwh,
+            average_daily_kwh=float(avg_daily),
+            tariff_code=d.tariff_code,
+            total_cost_witout_taxes=float(d.costo_base),
+            iva=float(d.iva),
+            total_cost_with_iva=float(d.costo_base + d.iva),
+            dap=float(d.dap),
+            total_cost=float(d.costo_total),
+            cost_per_kwh=float(d.costo_base) / kwh if kwh > 0 else 0,
+            cfe_breakdown=CfeBillingBreakdownResponse(
+                tier_lines=[
+                    CfeTierLineItem(
+                        segment_year=r.segment_year,
+                        segment_month=r.segment_month,
+                        tier_level=r.tier_level,
+                        tier_name=r.tier_name,
+                        days_in_segment=r.days_in_segment,
+                        prorated_kwh_capacity=None
+                        if r.prorated_kwh_capacity is None
+                        else float(r.prorated_kwh_capacity),
+                        kwh_charged=float(r.kwh_charged),
+                        price_per_kwh=float(r.price_per_kwh),
+                        subtotal=float(r.subtotal),
+                    )
+                    for r in d.renglones
+                ],
+                subtotal_before_taxes=float(d.costo_base),
+                iva=float(d.iva),
+                dap=float(d.dap),
+                total=float(d.costo_total),
+            ),
+        )
 
     def _build_meter_reading_response(
         self,
