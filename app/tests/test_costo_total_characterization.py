@@ -16,6 +16,7 @@ from model.domain.tariff_model import Tariff
 from model.domain.tariff_range_model import TariffRange
 from model.domain.tariff_version_model import TariffVersion
 from services.business.billing_service import BillingService, BillingServiceError
+from services.business.costo_total import NoAsignacionVigente
 
 D = Decimal
 
@@ -120,8 +121,10 @@ class AsignacionSelectionTests(unittest.TestCase):
         return uow, BillingService(uow)
 
     def code(self, svc, d):
-        t = svc._get_active_tariff(1, d)
-        return t.code if t else None
+        try:
+            return svc.costo_total.calculate(Decimal(0), 1, d, d).tariff_code
+        except NoAsignacionVigente:
+            return None
 
     def test_start_and_end_dates_are_inclusive(self):
         uow, svc = self._service()
