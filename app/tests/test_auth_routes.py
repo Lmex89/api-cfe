@@ -118,11 +118,12 @@ class RegisterTest(unittest.TestCase):
 
 
 def _protected_routes():
-    for route in app.routes:
-        path = getattr(route, "path", "")
+    # app.routes no longer flattens included routers (FastAPI >= 0.14x); the
+    # OpenAPI schema does, and it is the public surface anyway.
+    for path, operations in app.openapi()["paths"].items():
         if path.startswith("/api/v1/") and not path.startswith("/api/v1/auth/"):
-            for method in route.methods - {"HEAD", "OPTIONS"}:
-                yield method, re.sub(r"\{[^}]+\}", "1", path)
+            for method in operations.keys() & {"get", "post", "put", "delete", "patch"}:
+                yield method.upper(), re.sub(r"\{[^}]+\}", "1", path)
     yield "GET", "/api/v1/auth/me"
 
 
