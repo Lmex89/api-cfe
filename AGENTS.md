@@ -397,3 +397,21 @@ Add to `.env` for cloud backup:
 4. Create repository class in `app/db/repositories/`
 5. Add repository to `TariffConsumptionUnitofWork` in `app/db/uow.py`
 6. Create Pydantic serializers in `model/`
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues (`Lmex89/api-cfe`), via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Pull requests
+
+Always write PR bodies with the `pr` skill (Summary, Evidence, Merge Danger). Do not hand-roll the body.
