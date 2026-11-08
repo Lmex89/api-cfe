@@ -104,7 +104,11 @@ def make_client(uow, user=DEFAULT_USER):
         app.dependency_overrides[get_current_user] = lambda: user
     stack.callback(app.dependency_overrides.clear)
 
-    client = TestClient(app)
-    original_exit = client.__exit__
-    client.__exit__ = lambda *a: (original_exit(*a), stack.close())[0]
-    return client
+    class _Client(TestClient):
+        def __exit__(self, *args):
+            try:
+                return super().__exit__(*args)
+            finally:
+                stack.close()
+
+    return _Client(app)
