@@ -29,6 +29,7 @@ def create_meter_reading(payload: MeterReadingCreate) -> MeterReadingResponse:
 @router.get("", response_model=List[MeterReadingResponse])
 def list_meter_readings(
     household_id: Optional[int] = Query(default=None, gt=0),
+    billing_period_id: Optional[int] = Query(default=None, gt=0),
     reading_date_from: Optional[date] = None,
     reading_date_to: Optional[date] = None,
     limit: int = Query(default=100, ge=1, le=500),
@@ -36,6 +37,7 @@ def list_meter_readings(
 ) -> List[MeterReadingResponse]:
     return meter_reading_handler.list_meter_readings(
         household_id=household_id,
+        billing_period_id=billing_period_id,
         reading_date_from=reading_date_from,
         reading_date_to=reading_date_to,
         limit=limit,

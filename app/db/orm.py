@@ -101,8 +101,8 @@ tariff_versions_table = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("tariff_id", Integer, ForeignKey("tariffs.id"), nullable=False),
-    Column("start_date", Date, nullable=False),
-    Column("end_date", Date, nullable=True),
+    Column("year", Integer, nullable=False),
+    Column("month", Integer, nullable=False),
     Column("created_at", DateTime, nullable=True, server_default=func.current_timestamp()),
     Column(
         "updated_at",
@@ -111,7 +111,8 @@ tariff_versions_table = Table(
         server_default=func.current_timestamp(),
         server_onupdate=func.current_timestamp(),
     ),
-    UniqueConstraint("tariff_id", "start_date", name="uniq_tariff_period"),
+    UniqueConstraint("tariff_id", "year", "month", name="uniq_tariff_period"),
+    Index("idx_tariff_versions_tariff_period", "tariff_id", "year", "month"),
 )
 
 tariff_ranges_table = Table(
@@ -236,8 +237,8 @@ def start_mappers():
         properties={
             "id": tariff_versions_table.c.id,
             "tariff_id": tariff_versions_table.c.tariff_id,
-            "start_date": tariff_versions_table.c.start_date,
-            "end_date": tariff_versions_table.c.end_date,
+            "year": tariff_versions_table.c.year,
+            "month": tariff_versions_table.c.month,
             "created_at": tariff_versions_table.c.created_at,
             "updated_at": tariff_versions_table.c.updated_at,
         },

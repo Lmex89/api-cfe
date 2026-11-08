@@ -1,12 +1,32 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
 
+class CfeTierLineItem(BaseModel):
+    segment_year: int
+    segment_month: int
+    tier_level: int
+    tier_name: str
+    days_in_segment: int
+    prorated_kwh_capacity: Optional[float] = None  # None = unlimited
+    kwh_charged: float
+    price_per_kwh: float
+    subtotal: float
+
+
+class CfeBillingBreakdownResponse(BaseModel):
+    tier_lines: List[CfeTierLineItem]
+    subtotal_before_taxes: float
+    iva: float
+    dap: float
+    total: float
+
+
 class BillingPeriodCostResponse(BaseModel):
-    billing_period_id: int
+    billing_period_id: Optional[int] = None
     household_id: int
     household_name: str
     period_start: date
@@ -16,10 +36,11 @@ class BillingPeriodCostResponse(BaseModel):
     tariff_code: str
     total_cost_witout_taxes: float
     cost_per_kwh: float
-    iva: float 
+    iva: float
     total_cost_with_iva: float
     dap: float
     total_cost: float
+    cfe_breakdown: Optional[CfeBillingBreakdownResponse] = None
 
 
 class ActiveTariffResponse(BaseModel):
@@ -30,8 +51,8 @@ class ActiveTariffResponse(BaseModel):
 class ActiveTariffVersionResponse(BaseModel):
     id: int
     tariff_id: int
-    start_date: date
-    end_date: date | None = None
+    year: int
+    month: int
 
 
 class TariffCostCalculationResponse(BaseModel):
@@ -73,3 +94,37 @@ class MultiplePeriodsSummaryResponse(BaseModel):
     total_consumption_kwh: float
     total_cost: float
     periods: List[BillingPeriodCostResponse]
+
+
+class MeterReadingWithHistoryResponse(BaseModel):
+    """Single meter reading with historical consumption context."""
+    id: int
+    household_id: int
+    reading_date: date
+    reading_kwh: float
+    is_initial: bool
+    created_at: Optional[datetime] = None
+    consumption_since_last: Optional[float] = None
+    days_since_last: Optional[int] = None
+    average_daily_consumption_since_last: Optional[float] = None
+    billing_period_cost: Optional[BillingPeriodCostResponse] = None
+
+
+class BillingPeriodInfoResponse(BaseModel):
+    """Billing period information."""
+    id: int
+    start_date: date
+    end_date: date
+
+
+class MeterReadingHistoryDashboardResponse(BaseModel):
+    """Dashboard response for meter readings with historical consumption."""
+    household: HouseholdResponse
+    billing_period: Optional[BillingPeriodInfoResponse] = None
+    period: DateRangeResponse
+    number_of_readings: int
+    total_consumption_kwh: float
+    readings: List[MeterReadingWithHistoryResponse]
+
+
+

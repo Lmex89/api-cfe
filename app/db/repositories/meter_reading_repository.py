@@ -2,6 +2,7 @@ from datetime import date
 from typing import Any, List, Optional
 
 from common.db.base import BaseRepository
+from common.model.rest import ResolvedMeterReadingQuery
 from model.domain.meter_reading_model import MeterReading
 
 
@@ -55,6 +56,22 @@ class MeterReadingRepository(BaseRepository):
             self.session.query(MeterReading)
             .filter_by(household_id=household_id, reading_date=reading_date)
             .first()
+        )
+
+    def get_by_billing_period_and_date_range(
+        self,
+        household_id: int,
+        reading_date_from: date,
+        reading_date_to: date,
+    ) -> List[MeterReading]:
+        """Get meter readings for a household within a date range."""
+        return (
+            self.session.query(MeterReading)
+            .filter(MeterReading.household_id == household_id)
+            .filter(MeterReading.reading_date >= reading_date_from)
+            .filter(MeterReading.reading_date <= reading_date_to)
+            .order_by(MeterReading.reading_date.asc(), MeterReading.id.asc())
+            .all()
         )
 
     def get_first_reading_in_range(

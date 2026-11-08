@@ -2,9 +2,10 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
 
-from db.uow import TariffConsumptionUnitofWork
+if TYPE_CHECKING:
+    from db.uow import TariffConsumptionUnitofWork
 
 
 class MeterReadingConsumptionCalculator:
@@ -13,7 +14,7 @@ class MeterReadingConsumptionCalculator:
     Sole Purpose: Calculate consumption from meter readings only.
     """
 
-    def __init__(self, uow: TariffConsumptionUnitofWork):
+    def __init__(self, uow: "TariffConsumptionUnitofWork"):
         self.uow = uow
 
     def calculate_total(

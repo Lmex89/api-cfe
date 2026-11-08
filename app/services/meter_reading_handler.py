@@ -89,6 +89,7 @@ def get_meter_reading(meter_reading_id: int) -> MeterReadingResponse:
 
 def list_meter_readings(
     household_id: Optional[int] = None,
+    billing_period_id: Optional[int] = None,
     reading_date_from: Optional[date] = None,
     reading_date_to: Optional[date] = None,
     limit: int = 100,
@@ -96,8 +97,9 @@ def list_meter_readings(
 ) -> List[MeterReadingResponse]:
     log = logger.bind(operation="list_meter_readings")
     log.info(
-        "List meter readings requested with household_id={}, reading_date_from={}, reading_date_to={}, limit={}, offset={}",
+        "List meter readings requested with household_id={}, billing_period_id={}, reading_date_from={}, reading_date_to={}, limit={}, offset={}",
         household_id,
+        billing_period_id,
         reading_date_from,
         reading_date_to,
         limit,
@@ -105,6 +107,25 @@ def list_meter_readings(
     )
 
     with TariffConsumptionUnitofWork() as uow:
+        if billing_period_id is not None:
+            billing_period = uow.billing_period_repository.get(billing_period_id)
+            if not billing_period:
+                log.info(
+                    "Billing period not found for billing_period_id={}",
+                    billing_period_id,
+                )
+                raise HTTPException(
+                    status_code=HTTP_404_NOT_FOUND,
+                    detail="Billing period not found",
+                )
+
+            if household_id is None:
+                household_id = billing_period.household_id
+            if reading_date_from is None:
+                reading_date_from = billing_period.start_date
+            if reading_date_to is None:
+                reading_date_to = billing_period.end_date
+
         records = uow.meter_reading_repository.list(
             household_id=household_id,
             reading_date_from=reading_date_from,
