@@ -134,7 +134,7 @@ class BillingService:
             subtotal_before_taxes=float(base_cost),
             iva=float(iva),
             dap=float(dap),
-            total=float(base_cost + iva + dap),
+            total=float(d.costo_total),
         )
 
         return BillingPeriodCostResponse(
@@ -150,10 +150,8 @@ class BillingService:
             iva=float(iva),
             total_cost_with_iva=float(iva + base_cost),
             dap=float(dap),
-            total_cost=float(iva + base_cost + dap),
-            cost_per_kwh=(float(base_cost) / consumption_value)
-            if consumption_value > 0
-            else 0,
+            total_cost=float(d.costo_total),
+            cost_per_kwh=float(d.cost_per_kwh),
             cfe_breakdown=cfe_breakdown,
         )
 

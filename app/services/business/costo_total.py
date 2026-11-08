@@ -91,7 +91,7 @@ class Desglose:
 
 
 @dataclass
-class _Slot:
+class _SegmentoRango:
     segment: MonthSegment
     tier_level: int
     price_per_kwh: Decimal
@@ -136,9 +136,9 @@ class CostoTotal:
 
         efectiva = midpoint_date(start_date, end_date)
         tariff_id, code = self._asignacion_vigente(vivienda_id, efectiva)
-        slots = self._slots(self._segments(start_date, end_date), tariff_id)
-        self._fill_segments(slots, consumo)
-        return self._desglose(slots, tariff_id, code, consumo)
+        segmento_rangos = self._segmento_rangos(self._segments(start_date, end_date), tariff_id)
+        self._fill_segments(segmento_rangos, consumo)
+        return self._desglose(segmento_rangos, tariff_id, code, consumo)
 
     # -- Asignación ---------------------------------------------------
 
@@ -174,8 +174,8 @@ class CostoTotal:
             return [self._midpoint_segment(start, end)]
         return segments
 
-    def _slots(self, segments: List[MonthSegment], tariff_id: int) -> List[_Slot]:
-        slots: List[_Slot] = []
+    def _segmento_rangos(self, segments: List[MonthSegment], tariff_id: int) -> List[_SegmentoRango]:
+        segmento_rangos: List[_SegmentoRango] = []
         for seg in segments:
             version = self.catalog.version(tariff_id, seg.year, seg.month)
             if not version:
@@ -195,18 +195,18 @@ class CostoTotal:
                     None if tr.range_max is None
                     else (tr.range_max - tr.range_min) / cal * seg_d * Decimal(seg.capacity_factor)
                 )
-                slots.append(_Slot(seg, i + 1, tr.price_per_kwh, capacity))
-        return slots
+                segmento_rangos.append(_SegmentoRango(seg, i + 1, tr.price_per_kwh, capacity))
+        return segmento_rangos
 
     # -- Filling (ADR-0003) -------------------------------------------
 
-    def _fill_segments(self, slots: List[_Slot], consumo: Decimal) -> None:
-        grouped: Dict[Any, List[_Slot]] = defaultdict(list)
-        for s in slots:
+    def _fill_segments(self, segmento_rangos: List[_SegmentoRango], consumo: Decimal) -> None:
+        grouped: Dict[Any, List[_SegmentoRango]] = defaultdict(list)
+        for s in segmento_rangos:
             seg = s.segment
             grouped[(seg.year, seg.month, seg.start_date, seg.end_date)].append(s)
         if len(grouped) <= 1:
-            self._fill_tiers(slots, consumo)
+            self._fill_tiers(segmento_rangos, consumo)
             return
 
         keys = sorted(grouped)
@@ -225,9 +225,9 @@ class CostoTotal:
             self._fill_tiers(grouped[k], part)
 
     @staticmethod
-    def _fill_tiers(slots: List[_Slot], consumo: Decimal) -> None:
-        levels: Dict[int, List[_Slot]] = defaultdict(list)
-        for s in slots:
+    def _fill_tiers(segmento_rangos: List[_SegmentoRango], consumo: Decimal) -> None:
+        levels: Dict[int, List[_SegmentoRango]] = defaultdict(list)
+        for s in segmento_rangos:
             levels[s.tier_level].append(s)
         remaining = consumo
         for level in sorted(levels):
@@ -255,8 +255,8 @@ class CostoTotal:
     # -- Result -------------------------------------------------------
 
     @staticmethod
-    def _desglose(slots: List[_Slot], tariff_id: int, code: str, consumo: Decimal) -> Desglose:
-        names = _tier_names(max((s.tier_level for s in slots), default=0))
+    def _desglose(segmento_rangos: List[_SegmentoRango], tariff_id: int, code: str, consumo: Decimal) -> Desglose:
+        names = _tier_names(max((s.tier_level for s in segmento_rangos), default=0))
         renglones = [
             Renglon(
                 segment_year=s.segment.year,
@@ -269,7 +269,7 @@ class CostoTotal:
                 price_per_kwh=s.price_per_kwh,
                 subtotal=s.kwh_charged * s.price_per_kwh,
             )
-            for s in slots
+            for s in segmento_rangos
         ]
         base = Decimal("0")
         for r in renglones:

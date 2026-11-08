@@ -15,8 +15,6 @@ from db.uow import TariffConsumptionUnitofWork
 from model.dashboard_serializers import (
     BillingPeriodCostResponse,
     BillingPeriodInfoResponse,
-    CfeBillingBreakdownResponse,
-    CfeTierLineItem,
     DateRangeResponse,
     HouseholdConsumptionDashboardResponse,
     HouseholdResponse,
@@ -27,10 +25,8 @@ from model.dashboard_serializers import (
 from model.domain.billing_period_model import BillingPeriod
 from model.domain.household_model import Household
 from model.domain.meter_reading_model import MeterReading
-from services.business.billing_service import BillingServiceError
+from services.business.billing_service import BillingService, BillingServiceError
 from services.business import MeterReadingConsumptionCalculator
-from services.business.costo_total import CostoTotal, CostoTotalError, Desglose
-from services.business.costo_total_catalog import UowTariffCatalog
 
 
 class DashboardService:
@@ -55,7 +51,7 @@ class DashboardService:
         if not household:
             logger.debug(f"Household not found: household_id={household_id}")
             raise BillingServiceError(
-                "Household not found", 422
+                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
             )
 
         readings_raw = calc.get_readings_in_range(
@@ -391,81 +387,23 @@ class DashboardService:
                 f"Calculating interval cost: household_id={household_id}, start_date={start_date}, end_date={end_date}, "
                 f"billing_period_id={billing_period.id if billing_period else 'N/A'}"
             )
-            consumption_calc = MeterReadingConsumptionCalculator(uow)
-            consumo = consumption_calc.calculate_total(household_id, start_date, end_date)
-            d = CostoTotal(UowTariffCatalog(uow)).calculate(
-                consumo,
-                household_id,
-                start_date,
-                end_date,
-                periodo_id=billing_period.id if billing_period else None,
-            )
-            cost = self._to_cost_response(
-                d,
-                uow.household_repository.get(household_id).name,
+            cost = BillingService(uow).calculate_cost_for_date_range(
                 household_id,
                 start_date,
                 end_date,
                 billing_period.id if billing_period else None,
-                consumo,
-                consumption_calc.calculate_average_daily(household_id, start_date, end_date),
             )
             logger.debug(
                 f"Calculated interval cost: household_id={household_id}, start_date={start_date}, "
                 f"end_date={end_date}, total_cost={cost.total_cost}"
             )
             return cost
-        except CostoTotalError as exc:
+        except BillingServiceError as exc:
             logger.warning(
                 f"Unable to calculate interval cost: household_id={household_id}, start_date={start_date}, "
                 f"end_date={end_date}, billing_period_id={billing_period.id if billing_period else 'N/A'}, reason={exc}"
             )
             return None
-
-    @staticmethod
-    def _to_cost_response(
-        d: Desglose, name, household_id, start, end, periodo_id, consumo, avg_daily
-    ) -> BillingPeriodCostResponse:
-        """Float conversion happens only here."""
-        kwh = float(consumo)
-        return BillingPeriodCostResponse(
-            billing_period_id=periodo_id,
-            household_id=household_id,
-            household_name=name,
-            period_start=start,
-            period_end=end,
-            total_consumption_kwh=kwh,
-            average_daily_kwh=float(avg_daily),
-            tariff_code=d.tariff_code,
-            total_cost_witout_taxes=float(d.costo_base),
-            iva=float(d.iva),
-            total_cost_with_iva=float(d.costo_base + d.iva),
-            dap=float(d.dap),
-            total_cost=float(d.costo_total),
-            cost_per_kwh=float(d.costo_base) / kwh if kwh > 0 else 0,
-            cfe_breakdown=CfeBillingBreakdownResponse(
-                tier_lines=[
-                    CfeTierLineItem(
-                        segment_year=r.segment_year,
-                        segment_month=r.segment_month,
-                        tier_level=r.tier_level,
-                        tier_name=r.tier_name,
-                        days_in_segment=r.days_in_segment,
-                        prorated_kwh_capacity=None
-                        if r.prorated_kwh_capacity is None
-                        else float(r.prorated_kwh_capacity),
-                        kwh_charged=float(r.kwh_charged),
-                        price_per_kwh=float(r.price_per_kwh),
-                        subtotal=float(r.subtotal),
-                    )
-                    for r in d.renglones
-                ],
-                subtotal_before_taxes=float(d.costo_base),
-                iva=float(d.iva),
-                dap=float(d.dap),
-                total=float(d.costo_total),
-            ),
-        )
 
     def _build_meter_reading_response(
         self,

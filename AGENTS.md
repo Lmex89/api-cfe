@@ -83,7 +83,7 @@ app/
     config.py          # Environment-based config (DB, JWT, Twilio, HSM, etc.)
     logging.py         # Loguru interceptor for stdlib logging
     services/          # Shared service dependencies (auth_dependency, APIKeyChecker, auth_audit, time_decorator)
-    api/errors/        # Custom exception handlers (http_error, validation_error, entity not found, business_error)
+    api/errors/        # Custom exception handlers (http_error, validation_error, entity not found)
     api/responses.py   # Shared OpenAPI response dict
     db/base.py         # BaseRepository
     db/abstract_unit_of_work.py  # AbstractUnitOfWork

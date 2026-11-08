@@ -43,6 +43,36 @@ class HistoryRowCostTests(unittest.TestCase):
         self.assertEqual(costs, [0, 100, 300])
         self.assertAlmostEqual(r.readings[2].billing_period_cost.total_cost, 300 * 1.21)
 
+    def _seed_readings_only(self):
+        uow = FakeUoW()
+        uow.household_repository.add(Household(name="Casa"))
+        for day, kwh, first in [(1, 1000, True), (10, 1050, False)]:
+            uow.meter_reading_repository.add(
+                MeterReading(household_id=1, reading_date=date(2026, 4, day),
+                             reading_kwh=D(kwh), is_initial=first)
+            )
+        return uow
+
+    def test_row_cost_is_null_when_household_has_no_tariff(self):
+        r = DashboardService(self._seed_readings_only()).get_household_meter_readings_with_history(
+            1, start_date=date(2026, 4, 1), end_date=date(2026, 4, 30)
+        )
+        self.assertEqual([row.billing_period_cost for row in r.readings], [None, None])
+        self.assertEqual(r.readings[1].consumption_since_last, 50)
+
+    def test_row_cost_is_null_on_any_billing_service_failure(self):
+        from unittest.mock import patch
+        from services.business.billing_service import BillingServiceError
+
+        with patch(
+            "services.dashboard_service.BillingService.calculate_cost_for_date_range",
+            side_effect=BillingServiceError("Household not found", 422),
+        ):
+            r = DashboardService(self._seed_readings_only()).get_household_meter_readings_with_history(
+                1, start_date=date(2026, 4, 1), end_date=date(2026, 4, 30)
+            )
+        self.assertEqual([row.billing_period_cost for row in r.readings], [None, None])
+
 
 if __name__ == "__main__":
     unittest.main()
