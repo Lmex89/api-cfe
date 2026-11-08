@@ -306,10 +306,16 @@ The system manages the following core domain concepts:
 
 ## Testing
 
-- Tests use stdlib `unittest` (no pytest) and live in `app/tests/`:
-  - `test_cfe_billing_calculator.py` — billing calculator (midpoint ×2 factor, per-month proration).
-  - `test_feed_tariffs_from_scrapper.py` — feed script helpers + orchestration with fake repos.
+- Stdlib `unittest` (no pytest), tests in `app/tests/`. No MySQL needed.
 - Run: `cd app && .venv/bin/python -m unittest discover -s tests -v`
+- Files:
+  - `fakes.py` — shared `FakeRepository`, `FakeUoW`, `make_client` (not a test module).
+  - Calculator/scripts: `test_cfe_billing_calculator.py`, `test_period_rules.py`, `test_feed_tariffs_from_scrapper.py`.
+  - Route tests: `test_auth_routes.py`, `test_billing_periods_routes.py`, `test_dashboards_routes.py`, `test_households_routes.py`, `test_households_routes_crud.py`, `test_household_tariffs_routes.py`, `test_meter_readings_routes.py`, `test_tariff_model_routes.py`.
+  - Cross-cutting: `test_error_responses.py`, `test_security_and_rate_limit.py`.
+- Writing a route test: build a `FakeUoW()`, seed `uow.<name>_repository.add(entity)`, then `with make_client(uow) as client: client.get("/api/v1/...")`. `make_client` swaps every module's `TariffConsumptionUnitofWork` for the fake and overrides `get_current_user`; pass `user=None` to exercise real auth/401s. The fake UoW keeps state across requests; assert on its repos and `uow.committed`.
+- Name tests with `GLOSSARY.md` vocabulary (Household, Billing Period, Tariff Version, ...).
+- Tests pin current behavior. Bugs found are reported (e.g. as issues), not fixed in the test change.
 - Manual testing is done via curl or API clients like Postman/Insomnia.
 
 ## Feeding Scraped Tariffs
