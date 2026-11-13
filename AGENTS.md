@@ -75,7 +75,6 @@ app/
       costo_total_catalog.py    # TariffCatalog adapters: UowTariffCatalog (prod), InMemoryTariffCatalog (tests)
       period_utils.py           # Billing period date/segment utilities (midpoint_date, MonthSegment, split_by_month_segments)
     dashboard_service.py        # DashboardService: household consumption dashboard + meter-reading history (filters, validation, cost per interval)
-    dashboard_handler.py        # Backward-compatible module wrapper delegating to DashboardService singleton
     constants.py                # URL-shortener constants (legacy: HOST_URL, CREATE/DELETE_API_KEY, TIME_EXPIRATION_URL)
     *_handler.py       # CRUD/service methods per domain
     tariff_version_normalizer.py
@@ -118,7 +117,6 @@ Dashboard endpoints live in `routes/dashboards.py` and are **auth-protected** (`
 
 - **`services/dashboard_service.py` (`DashboardService`)** — the service layer for the meter-reading history use-case. Owns a UoW factory (`TariffConsumptionUnitofWork` by default), validates filters, resolves the effective date range, fetches readings via `meter_reading_repository.get_by_billing_period_and_date_range`, and builds a per-reading history with cumulative cost per interval (pricing each interval with `CostoTotal`). Also serves the household consumption dashboard (`get_household_consumption_dashboard`, raises `BillingServiceError` 422 for a missing household). Tolerates `CostoTotalError` per interval (sets `billing_period_cost=None`).
   - Validation: **400** if neither `billing_period_id` nor a complete `start_date`+`end_date` range is provided; **400** if `start_date > end_date`; **404** for missing household/billing period; **400** if the billing period does not belong to the household.
-- **`services/dashboard_handler.py`** — thin module-level backward-compatible wrapper (`get_household_meter_readings_with_history`) delegating to a singleton `DashboardService`. Prefer `DashboardService` directly for new code.
 - **`services/business/costo_total.py` (`CostoTotal`)** — the single module that prices a Consumo. `calculate(consumo, vivienda_id, start, end, periodo_id=None)` returns a `Desglose`; a Periodo, if given, is read once and its end date replaces `end` for Fecha efectiva and segmentation. Its only seam is a `TariffCatalog` (`UowTariffCatalog` in production, `InMemoryTariffCatalog` in tests). Raises `CostoTotalError` subclasses only.
 - **`services/business/billing_service.py` (`BillingService`)** — wraps `CostoTotal` + `MeterReadingConsumptionCalculator` into `BillingPeriodCostResponse`: `calculate_billing_period_cost`, `calculate_cost_for_date_range`, `get_multiple_periods_summary`. Maps `CostoTotalError` to `BillingServiceError(message, 422)`.
 
