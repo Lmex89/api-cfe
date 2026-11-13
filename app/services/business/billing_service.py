@@ -17,15 +17,13 @@ from services.business import MeterReadingConsumptionCalculator
 from services.business.costo_total import CostoTotal, CostoTotalError
 from services.business.costo_total_catalog import UowTariffCatalog
 
-from starlette import status
 from model.domain.billing_period_model import BillingPeriod
 
 
 class BillingServiceError(Exception):
-    def __init__(self, message: str, status_code: int):
+    def __init__(self, message: str):
         super().__init__(message)
         self.message = message
-        self.status_code = status_code
 
 
 class BillingService:
@@ -61,9 +59,7 @@ class BillingService:
             logger.debug(
                 f"Billing period not found: billing_period_id={billing_period_id}"
             )
-            raise BillingServiceError(
-                "Billing period not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
+            raise BillingServiceError("Billing period not found")
 
         # Periodo already read here: its end date is passed as the range end.
         return self._calculate(
@@ -92,9 +88,7 @@ class BillingService:
     ) -> BillingPeriodCostResponse:
         household = self.uow.household_repository.get(household_id)
         if not household:
-            raise BillingServiceError(
-                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
+            raise BillingServiceError("Household not found")
         consumption = self.consumption_calc.calculate_total(
             household_id, start_date, end_date
         )
@@ -103,9 +97,7 @@ class BillingService:
                 consumption, household_id, start_date, end_date, periodo_id
             )
         except CostoTotalError as exc:
-            raise BillingServiceError(
-                str(exc), status.HTTP_422_UNPROCESSABLE_CONTENT
-            ) from exc
+            raise BillingServiceError(str(exc)) from exc
 
         avg_daily = self.consumption_calc.calculate_average_daily(
             household_id, start_date, end_date
@@ -165,9 +157,7 @@ class BillingService:
         household = self.uow.household_repository.get(household_id)
         if not household:
             logger.debug(f"Household not found: household_id={household_id}")
-            raise BillingServiceError(
-                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
+            raise BillingServiceError("Household not found")
 
         periods: list[BillingPeriod] = self.uow.billing_period_repository.list(
             household_id=household_id, limit=1000

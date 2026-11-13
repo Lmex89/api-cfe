@@ -66,7 +66,7 @@ class HistoryRowCostTests(unittest.TestCase):
 
         with patch(
             "services.dashboard_service.BillingService.calculate_cost_for_date_range",
-            side_effect=BillingServiceError("Household not found", 422),
+            side_effect=BillingServiceError("Household not found"),
         ):
             r = DashboardService(self._seed_readings_only()).get_household_meter_readings_with_history(
                 1, start_date=date(2026, 4, 1), end_date=date(2026, 4, 30)

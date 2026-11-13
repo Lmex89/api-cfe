@@ -3,7 +3,6 @@
 from datetime import date
 from typing import List, Optional
 
-from fastapi import HTTPException, status
 from loguru import logger
 
 from common.model.rest import (
@@ -27,6 +26,12 @@ from model.domain.household_model import Household
 from model.domain.meter_reading_model import MeterReading
 from services.business.billing_service import BillingService, BillingServiceError
 from services.business import MeterReadingConsumptionCalculator
+from services.errors import (
+    BillingPeriodNotFoundError,
+    BillingPeriodOwnershipError,
+    HouseholdNotFoundError,
+    InvalidFilterError,
+)
 
 
 class DashboardService:
@@ -50,9 +55,7 @@ class DashboardService:
         household = uow.household_repository.get(household_id)
         if not household:
             logger.debug(f"Household not found: household_id={household_id}")
-            raise BillingServiceError(
-                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
+            raise BillingServiceError("Household not found")
 
         readings_raw = calc.get_readings_in_range(
             household_id, start_date, end_date
@@ -154,10 +157,7 @@ class DashboardService:
             logger.debug(
                 "Invalid meter reading filters: missing billing_period_id and incomplete date range"
             )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either billing_period_id or both start_date and end_date must be provided",
-            )
+            raise InvalidFilterError("Either billing_period_id or both start_date and end_date must be provided")
 
         if (
             filters.start_date is not None
@@ -168,24 +168,18 @@ class DashboardService:
                 f"Invalid meter reading filters: start_date={filters.start_date} "
                 f"is after end_date={filters.end_date}"
             )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="start_date must be before end_date",
-            )
+            raise InvalidFilterError("start_date must be before end_date")
 
     def _get_household_or_404(
         self, uow: TariffConsumptionUnitofWork, household_id: int
     ) -> Household:
-        """Load a household or raise a 404 HTTP error."""
+        """Load a household or raise a domain error."""
         household = uow.household_repository.get(household_id)
         if not household:
             logger.debug(
                 f"Household not found for dashboard lookup: household_id={household_id}"
             )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Household not found",
-            )
+            raise HouseholdNotFoundError("Household not found")
         logger.debug(
             f"Resolved household for dashboard lookup: household_id={household_id}"
         )
@@ -215,10 +209,7 @@ class DashboardService:
                 f"Billing period ownership mismatch: billing_period_id={filters.billing_period_id}, "
                 f"billing_period_household_id={billing_period.household_id}, household_id={household_id}"
             )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Billing period does not belong to this household",
-            )
+            raise BillingPeriodOwnershipError("Billing period does not belong to this household")
 
         resolved_start_date = filters.start_date or billing_period.start_date
         resolved_end_date = filters.end_date or billing_period.end_date
@@ -235,16 +226,13 @@ class DashboardService:
     def _get_billing_period_or_404(
         self, uow: TariffConsumptionUnitofWork, billing_period_id: int
     ) -> BillingPeriod:
-        """Load a billing period or raise a 404 HTTP error."""
+        """Load a billing period or raise a domain error."""
         billing_period = uow.billing_period_repository.get(billing_period_id)
         if not billing_period:
             logger.debug(
                 f"Billing period not found for dashboard lookup: billing_period_id={billing_period_id}"
             )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Billing period not found",
-            )
+            raise BillingPeriodNotFoundError("Billing period not found")
         logger.debug(f"Resolved billing period: billing_period_id={billing_period_id}")
         return billing_period
 
