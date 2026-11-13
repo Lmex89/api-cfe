@@ -16,16 +16,24 @@ from model.dashboard_serializers import (
 from services.business import MeterReadingConsumptionCalculator
 from services.business.costo_total import CostoTotal, CostoTotalError
 from services.business.costo_total_catalog import UowTariffCatalog
+from services.business.history_rows import daily_average
 
-from starlette import status
 from model.domain.billing_period_model import BillingPeriod
 
 
 class BillingServiceError(Exception):
-    def __init__(self, message: str, status_code: int):
+    def __init__(self, message: str):
         super().__init__(message)
         self.message = message
-        self.status_code = status_code
+
+
+def load_household(uow, household_id: int, not_found=BillingServiceError):
+    """Load a Vivienda or raise `not_found` (billing routes keep their 422; history uses 404)."""
+    household = uow.household_repository.get(household_id)
+    if not household:
+        logger.debug(f"Household not found: household_id={household_id}")
+        raise not_found("Household not found")
+    return household
 
 
 class BillingService:
@@ -61,14 +69,9 @@ class BillingService:
             logger.debug(
                 f"Billing period not found: billing_period_id={billing_period_id}"
             )
-            raise BillingServiceError(
-                "Billing period not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
+            raise BillingServiceError("Billing period not found")
 
-        # Periodo already read here: its end date is passed as the range end.
-        return self._calculate(
-            bp.household_id, bp.start_date, bp.end_date, billing_period_id, None
-        )
+        return self._calculate(bp.household_id, bp.start_date, bp.end_date, billing_period_id)
 
     def calculate_cost_for_date_range(
         self,
@@ -77,10 +80,12 @@ class BillingService:
         end_date: date,
         billing_period_id: Optional[int] = None,
     ) -> BillingPeriodCostResponse:
-        """Calculate consumption and tariff cost for any household date range."""
-        return self._calculate(
-            household_id, start_date, end_date, billing_period_id, billing_period_id
-        )
+        """Calculate consumption and tariff cost for any household date range.
+
+        No production caller since the history prices cumulative Consumo directly;
+        kept as the legacy per-row path the characterization tests compare against.
+        """
+        return self._calculate(household_id, start_date, end_date, billing_period_id)
 
     def _calculate(
         self,
@@ -88,28 +93,32 @@ class BillingService:
         start_date: date,
         end_date: date,
         billing_period_id: Optional[int],
-        periodo_id: Optional[int],
     ) -> BillingPeriodCostResponse:
-        household = self.uow.household_repository.get(household_id)
-        if not household:
-            raise BillingServiceError(
-                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
+        household = load_household(self.uow, household_id)
         consumption = self.consumption_calc.calculate_total(
             household_id, start_date, end_date
         )
         try:
-            d = self.costo_total.calculate(
-                consumption, household_id, start_date, end_date, periodo_id
+            return self.cost_for_consumption(
+                household, consumption, start_date, end_date, billing_period_id
             )
         except CostoTotalError as exc:
-            raise BillingServiceError(
-                str(exc), status.HTTP_422_UNPROCESSABLE_CONTENT
-            ) from exc
+            raise BillingServiceError(str(exc)) from exc
 
-        avg_daily = self.consumption_calc.calculate_average_daily(
-            household_id, start_date, end_date
+    def cost_for_consumption(
+        self,
+        household,
+        consumption,
+        start_date: date,
+        end_date: date,
+        billing_period_id: Optional[int] = None,
+    ) -> BillingPeriodCostResponse:
+        """Price an already-computed Consumo (no reading queries). Raises CostoTotalError."""
+        household_id = household.id
+        d = self.costo_total.calculate(
+            consumption, household_id, start_date, end_date, billing_period_id
         )
+        avg_daily = daily_average(consumption, start_date, end_date)
         base_cost, iva, dap = d.costo_base, d.iva, d.dap
         consumption_value = float(consumption)
         cfe_breakdown = CfeBillingBreakdownResponse(
@@ -162,12 +171,7 @@ class BillingService:
         logger.info(
             f"Building periods summary for household_id={household_id}, start_date={start_date}, end_date={end_date}"
         )
-        household = self.uow.household_repository.get(household_id)
-        if not household:
-            logger.debug(f"Household not found: household_id={household_id}")
-            raise BillingServiceError(
-                "Household not found", status.HTTP_422_UNPROCESSABLE_CONTENT
-            )
+        household = load_household(self.uow, household_id)
 
         periods: list[BillingPeriod] = self.uow.billing_period_repository.list(
             household_id=household_id, limit=1000
