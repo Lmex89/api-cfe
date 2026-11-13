@@ -69,11 +69,11 @@ app/
     controller.py      # URL-shortener router (LEGACY — NOT registered in api.py; see Gotchas)
   services/            # Application/business logic handlers
     business/          # Business-specific calculation services
-      __init__.py                # MeterReadingConsumptionCalculator (SRP: consumption totals/averages/readings)
+      __init__.py                # MeterReadingConsumptionCalculator.calculate_total: Consumo between first/last Lectura in a range
       billing_service.py        # BillingService: period cost + multi-period summary (consumption + Costo total -> response)
       costo_total.py            # CostoTotal: sole module pricing a Consumo (Asignación, Fecha efectiva, segments, proration, taxes)
       costo_total_catalog.py    # TariffCatalog adapters: UowTariffCatalog (prod), InMemoryTariffCatalog (tests)
-      history_rows.py           # build_history_rows: pure derivation of per-reading history rows (cumulative Consumo, deltas)
+      history_rows.py           # the one Consumo derivation: consumption_between, daily_average, build_history_rows
       period_utils.py           # Billing period date/segment utilities (midpoint_date, MonthSegment, split_by_month_segments)
     errors.py                   # Domain errors (no HTTP): DashboardDomainError -> InvalidFilterError, HouseholdNotFoundError, BillingPeriodNotFoundError, BillingPeriodOwnershipError
     dashboard_service.py        # DashboardService: household consumption dashboard + meter-reading history (filters, validation, cost per interval)
@@ -120,10 +120,10 @@ Dashboard endpoints live in `routes/dashboards.py` and are **auth-protected** (`
 - **`services/dashboard_service.py` (`DashboardService`)** — the service layer for the meter-reading history use-case. Owns a UoW factory (`TariffConsumptionUnitofWork` by default), validates filters, resolves the effective date range, fetches readings via `meter_reading_repository.get_by_billing_period_and_date_range`, and builds a per-reading history with cumulative cost per interval (pricing each interval with `CostoTotal`). Also serves the household consumption dashboard (`get_household_consumption_dashboard`, raises `BillingServiceError` 422 for a missing household). Tolerates `CostoTotalError` per interval (sets `billing_period_cost=None`).
   - Validation: **400** if neither `billing_period_id` nor a complete `start_date`+`end_date` range is provided; **400** if `start_date > end_date`; **404** for missing household/billing period; **400** if the billing period does not belong to the household.
 - **`services/business/costo_total.py` (`CostoTotal`)** — the single module that prices a Consumo. `calculate(consumo, vivienda_id, start, end, periodo_id=None)` returns a `Desglose`; a Periodo, if given, is read once and its end date replaces `end` for Fecha efectiva and segmentation. Its only seam is a `TariffCatalog` (`UowTariffCatalog` in production, `InMemoryTariffCatalog` in tests). Raises `CostoTotalError` subclasses only.
-- **`services/business/billing_service.py` (`BillingService`)** — wraps `CostoTotal` + `MeterReadingConsumptionCalculator` into `BillingPeriodCostResponse`: `calculate_billing_period_cost`, `calculate_cost_for_date_range`, `get_multiple_periods_summary`. Maps `CostoTotalError` to `BillingServiceError(message)`; `BillingServiceError` carries no status code (routes map it to 422). `load_household` is the shared household lookup raising it.
+- **`services/business/billing_service.py` (`BillingService`)** — wraps `CostoTotal` + `MeterReadingConsumptionCalculator` into `BillingPeriodCostResponse`: `calculate_billing_period_cost`, `calculate_cost_for_date_range`, `get_multiple_periods_summary`. Maps `CostoTotalError` to `BillingServiceError(message)`; `BillingServiceError` carries no status code (routes map it to 422). `load_household(uow, id, not_found=BillingServiceError)` is the single Vivienda lookup; the history passes `HouseholdNotFoundError` (404), the billing routes keep 422. `cost_for_consumption` prices an already-derived Consumo. `calculate_cost_for_date_range` has no production caller; it stays as the legacy oracle for characterization tests.
 
 - **`CachedTariffCatalog`** (`costo_total_catalog.py`) — memoizing decorator over a `TariffCatalog`; the history flow wraps `UowTariffCatalog` in it so per-row pricing does not re-query the tariff data.
-- **`services/business/history_rows.py` (`build_history_rows`)** — pure function turning ordered readings into rows (cumulative Consumo, since-last delta/days/avg) plus total; used by both dashboard use-cases.
+- **`services/business/history_rows.py` (`build_history_rows`)** — pure function turning ordered readings into rows (cumulative Consumo, since-last delta/days/avg) plus total. `consumption_between` (also used by `MeterReadingConsumptionCalculator.calculate_total`) and `daily_average` (used by billing and the household dashboard) keep Consumo derived in one module. Routes build `DashboardService` only through `routes/dashboards.py` `dashboard_service()`.
 - **Single status map** — `routes/dashboards.py` `HTTP_STATUS_BY_ERROR` (looked up via MRO in `domain_errors_as_http`) is the only place domain errors become HTTP: `InvalidFilterError`/`BillingPeriodOwnershipError` 400, `HouseholdNotFoundError`/`BillingPeriodNotFoundError` 404, `BillingServiceError` 422. Services raise `services/errors.py` types only; the `start_date > end_date` route checks raise `InvalidFilterError` too.
 
 ### Dashboard Serializers
@@ -311,9 +311,9 @@ The system manages the following core domain concepts:
 - Run: `cd app && .venv/bin/python -m unittest discover -s tests -v`
 - Files:
   - `fakes.py` — shared `FakeRepository`, `FakeUoW`, `make_client` (not a test module).
-  - Calculator/scripts: `test_costo_total.py`, `test_costo_total_pricing.py`, `test_costo_total_characterization.py`, `test_dashboard_history_costs.py`, `test_period_rules.py`, `test_feed_tariffs_from_scrapper.py`.
+  - Calculator/scripts: `test_costo_total.py`, `test_costo_total_pricing.py`, `test_costo_total_characterization.py`, `test_dashboard_history_costs.py`, `test_history_rows.py`, `test_history_single_load.py`, `test_period_rules.py`, `test_feed_tariffs_from_scrapper.py`.
   - Route tests: `test_auth_routes.py`, `test_billing_periods_routes.py`, `test_dashboards_routes.py`, `test_households_routes.py`, `test_households_routes_crud.py`, `test_household_tariffs_routes.py`, `test_meter_readings_routes.py`, `test_tariff_model_routes.py`.
-  - Cross-cutting: `test_error_responses.py`, `test_security_and_rate_limit.py`.
+  - Cross-cutting: `test_dashboard_error_mapping.py`, `test_error_responses.py`, `test_security_and_rate_limit.py`.
 - Writing a route test: build a `FakeUoW()`, seed `uow.<name>_repository.add(entity)`, then `with make_client(uow) as client: client.get("/api/v1/...")`. `make_client` swaps every module's `TariffConsumptionUnitofWork` for the fake and overrides `get_current_user`; pass `user=None` to exercise real auth/401s. The fake UoW keeps state across requests; assert on its repos and `uow.committed`.
 - Name tests with `GLOSSARY.md` vocabulary (Household, Billing Period, Tariff Version, ...).
 - Tests pin current behavior. Bugs found are reported (e.g. as issues), not fixed in the test change.
