@@ -31,6 +31,38 @@ class UowTariffCatalog:
         return self.uow.tariff_range_repository.list(tariff_version_id=version_id)
 
 
+class CachedTariffCatalog:
+    """Memoizes a catalog for one operation, so repeated pricing reads each datum once."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self._cache: Dict[Any, Any] = {}
+
+    def _get(self, name, *args):
+        key = (name, *args)
+        if key not in self._cache:
+            self._cache[key] = getattr(self._inner, name)(*args)
+        return self._cache[key]
+
+    def vivienda(self, vivienda_id):
+        return self._get("vivienda", vivienda_id)
+
+    def periodo(self, periodo_id):
+        return self._get("periodo", periodo_id)
+
+    def asignaciones(self, vivienda_id):
+        return self._get("asignaciones", vivienda_id)
+
+    def tarifa(self, tariff_id):
+        return self._get("tarifa", tariff_id)
+
+    def version(self, tariff_id, year, month):
+        return self._get("version", tariff_id, year, month)
+
+    def rangos(self, version_id):
+        return self._get("rangos", version_id)
+
+
 class InMemoryTariffCatalog:
     """Plain-list catalog; `asignaciones` are given oldest first, like the repository."""
 

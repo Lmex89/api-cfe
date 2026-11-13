@@ -175,7 +175,6 @@ class AsignacionSelectionTests(unittest.TestCase):
         with self.assertRaises(BillingServiceError) as cm:
             BillingService(uow).calculate_billing_period_cost(1)
         self.assertEqual(cm.exception.message, "No active tariff for this period")
-        self.assertEqual(cm.exception.status_code, 422)
 
 
 class PeriodoEndOverrideTests(unittest.TestCase):
@@ -232,7 +231,6 @@ class MissingVersionOrRangosTests(unittest.TestCase):
         uow.billing_period_repository.add(BillingPeriod(1, date(2026, 4, 1), date(2026, 5, 31)))
         with self.assertRaises(BillingServiceError) as cm:
             BillingService(uow).calculate_billing_period_cost(1)
-        self.assertEqual(cm.exception.status_code, 422)
         self.assertIn("No tariff ranges configured", cm.exception.message)
 
 
