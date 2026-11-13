@@ -30,8 +30,6 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-dashboard_service = DashboardService()
-
 # The single domain error -> HTTP status map for every dashboard route.
 HTTP_STATUS_BY_ERROR = {
     InvalidFilterError: status.HTTP_400_BAD_REQUEST,
@@ -126,7 +124,9 @@ def get_household_meter_readings_with_history(
     ),
 ) -> MeterReadingHistoryDashboardResponse:
     with domain_errors_as_http():
-        return dashboard_service.get_household_meter_readings_with_history(
+        return DashboardService(
+            TariffConsumptionUnitofWork
+        ).get_household_meter_readings_with_history(
             household_id=household_id,
             billing_period_id=billing_period_id,
             start_date=start_date,

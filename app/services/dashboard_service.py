@@ -6,7 +6,6 @@ from typing import List, Optional
 from loguru import logger
 
 from common.model.rest import (
-    IntervalDetails,
     MeterReadingFilters,
     ResolvedMeterReadingQuery,
 )
@@ -32,6 +31,7 @@ from services.errors import (
     HouseholdNotFoundError,
     InvalidFilterError,
 )
+from services.business.history_rows import build_history_rows
 
 
 class DashboardService:
@@ -48,7 +48,6 @@ class DashboardService:
             return self._consumption_dashboard(uow, household_id, start_date, end_date)
 
     def _consumption_dashboard(self, uow, household_id, start_date, end_date):
-        calc = MeterReadingConsumptionCalculator(uow)
         logger.info(
             f"Building household dashboard for household_id={household_id}, start_date={start_date}, end_date={end_date}"
         )
@@ -57,23 +56,24 @@ class DashboardService:
             logger.debug(f"Household not found: household_id={household_id}")
             raise BillingServiceError("Household not found")
 
-        readings_raw = calc.get_readings_in_range(
-            household_id, start_date, end_date
+        domain_readings = uow.meter_reading_repository.list(
+            household_id=household_id,
+            reading_date_from=start_date,
+            reading_date_to=end_date,
+            limit=1000,
         )
-        total_consumption = calc.calculate_total(
-            household_id, start_date, end_date
-        )
-        avg_daily = calc.calculate_average_daily(
-            household_id, start_date, end_date
-        )
+        rows, _ = build_history_rows(domain_readings)
+        # last cumulative == last - first, as the previous first/last query gave
+        total_consumption = rows[-1].cumulative_consumption if rows else 0.0
+        avg_daily = total_consumption / ((end_date - start_date).days or 1)
 
         readings = [
             MeterReadingPointResponse(
-                date=date.fromisoformat(item["date"]),
-                reading_kwh=float(item["reading_kwh"]),
-                is_initial=bool(item["is_initial"]),
+                date=row.reading.reading_date,
+                reading_kwh=float(row.reading.reading_kwh),
+                is_initial=bool(row.reading.is_initial),
             )
-            for item in readings_raw
+            for row in rows
         ]
         logger.debug(
             f"Dashboard metrics: household_id={household_id}, readings={len(readings)}, "
@@ -256,110 +256,24 @@ class DashboardService:
             )
             return [], 0.0
 
-        first_reading = readings[0]
-        total_consumption = 0.0
-        responses: List[MeterReadingWithHistoryResponse] = []
-
-        for index, reading in enumerate(readings):
-            logger.debug(
-                f"Processing meter reading for history: household_id={household_id}, "
-                f"reading_id={reading.id}, reading_date={reading.reading_date}, "
-                f"reading_kwh={reading.reading_kwh}, is_initial={reading.is_initial}"
+        rows, total_consumption = build_history_rows(readings)
+        responses = [
+            self._build_meter_reading_response(
+                reading=row.reading,
+                consumption_since_last=row.consumption_since_last,
+                days_since_last=row.days_since_last,
+                average_daily_consumption=row.average_daily_consumption,
+                billing_period_cost=self._calculate_interval_cost(
+                    household_id=household_id,
+                    start_date=readings[0].reading_date,
+                    end_date=row.reading.reading_date,
+                    uow=uow,
+                    billing_period=resolved_query.billing_period,
+                ),
             )
-            previous_reading = readings[index - 1] if index > 0 else None
-            interval = self._build_interval_details(
-                first_reading=first_reading,
-                current_reading=reading,
-                previous_reading=previous_reading,
-                household_id=household_id,
-                uow=uow,
-                billing_period=resolved_query.billing_period,
-            )
-            total_consumption += interval.consumption_for_total
-            responses.append(
-                self._build_meter_reading_response(
-                    reading=reading,
-                    consumption_since_last=interval.consumption_since_last,
-                    days_since_last=interval.days_since_last,
-                    average_daily_consumption=interval.average_daily_consumption,
-                    billing_period_cost=interval.billing_period_cost,
-                )
-            )
-
-        logger.debug(
-            f"Built meter reading history rows: household_id={household_id}, count={len(responses)}, "
-            f"total_consumption={total_consumption}"
-        )
+            for row in rows
+        ]
         return responses, total_consumption
-
-    def _build_interval_details(
-        self,
-        first_reading: MeterReading,
-        current_reading: MeterReading,
-        previous_reading: Optional[MeterReading],
-        household_id: int,
-        uow: TariffConsumptionUnitofWork,
-        billing_period: Optional[BillingPeriod],
-    ) -> IntervalDetails:
-        """Compute row metrics and cumulative pricing from the first reading to the current one."""
-        logger.debug(
-            f"Calculating interval details: household_id={household_id}, "
-            f"first_reading_id={first_reading.id}, current_reading_id={current_reading.id}, "
-            f"billing_period_id={billing_period.id if billing_period else 'N/A'}"
-        )
-        billing_period_cost = self._calculate_interval_cost(
-            household_id=household_id,
-            start_date=first_reading.reading_date,
-            end_date=current_reading.reading_date,
-            uow=uow,
-            billing_period=billing_period,
-        )
-
-        if previous_reading is None:
-            logger.debug(
-                f"First reading interval details: household_id={household_id}, "
-                f"first_reading_id={first_reading.id}, current_reading_id={current_reading.id}, "
-                f"billing_period_cost={billing_period_cost.total_cost if billing_period_cost else 'N/A'}"
-            )
-            return IntervalDetails(
-                consumption_since_last=None,
-                days_since_last=None,
-                average_daily_consumption=None,
-                billing_period_cost=billing_period_cost,
-                consumption_for_total=0.0,
-            )
-
-        consumption_since_last = float(
-            current_reading.reading_kwh - previous_reading.reading_kwh
-        )
-        days_since_last = (
-            current_reading.reading_date - previous_reading.reading_date
-        ).days
-        average_daily_consumption = None
-        if days_since_last > 0:
-            average_daily_consumption = consumption_since_last / days_since_last
-
-        logger.debug(
-            f"Calculated interval details: household_id={household_id}, first_reading_id={first_reading.id}, "
-            f"previous_reading_id={previous_reading.id}, current_reading_id={current_reading.id}, "
-            f"consumption_since_last={consumption_since_last}, days_since_last={days_since_last}, "
-            f"average_daily_consumption={average_daily_consumption}"
-            f", billing_period_cost={billing_period_cost.total_cost if billing_period_cost else 'N/A'}"
-            f", consumption_for_total={consumption_since_last}"
-            f" (first_reading_kwh={first_reading.reading_kwh}, current_reading_kwh={current_reading.reading_kwh})"
-            f" (previous_reading_kwh={previous_reading.reading_kwh if previous_reading else 'N/A'})"
-            f" (current_reading_date={current_reading.reading_date}, previous_reading_date={previous_reading.reading_date if previous_reading else 'N/A'})"
-            f" (billing_period_start={billing_period.start_date if billing_period else 'N/A'}, billing_period_end={billing_period.end_date if billing_period else 'N/A'})"
-            f" (billing_period_cost_calculation_start={first_reading.reading_date}, billing_period_cost_calculation_end={current_reading.reading_date}) "
-            f"(billing_period_cost_calculation_billing_period_id={billing_period.id if billing_period else 'N/A'})"
-        )
-        return IntervalDetails(
-            consumption_since_last=consumption_since_last,
-            days_since_last=days_since_last,
-            average_daily_consumption=average_daily_consumption,
-            billing_period_cost=billing_period_cost,
-            consumption_for_total=consumption_since_last,
-        )
 
     def _calculate_interval_cost(
         self,
