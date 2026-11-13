@@ -23,7 +23,11 @@ from model.dashboard_serializers import (
 from model.domain.billing_period_model import BillingPeriod
 from model.domain.household_model import Household
 from model.domain.meter_reading_model import MeterReading
+from decimal import Decimal
+
 from services.business.billing_service import BillingService, BillingServiceError
+from services.business.costo_total import CostoTotal, CostoTotalError
+from services.business.costo_total_catalog import CachedTariffCatalog, UowTariffCatalog
 from services.business import MeterReadingConsumptionCalculator
 from services.errors import (
     BillingPeriodNotFoundError,
@@ -132,7 +136,7 @@ class DashboardService:
             readings_with_history, total_consumption = (
                 self._build_meter_reading_history(
                     readings=readings,
-                    household_id=household_id,
+                    household=household,
                     uow=uow,
                     resolved_query=resolved_query,
                 )
@@ -239,11 +243,12 @@ class DashboardService:
     def _build_meter_reading_history(
         self,
         readings: List[MeterReading],
-        household_id: int,
+        household: Household,
         uow: TariffConsumptionUnitofWork,
         resolved_query: ResolvedMeterReadingQuery,
     ) -> tuple[List[MeterReadingWithHistoryResponse], float]:
         """Transform raw readings into dashboard rows and aggregate consumption."""
+        household_id = household.id
         logger.debug(
             f"Building meter reading history: household_id={household_id}, "
             f"reading_count={len(readings)}, "
@@ -257,6 +262,9 @@ class DashboardService:
             return [], 0.0
 
         rows, total_consumption = build_history_rows(readings)
+        billing = BillingService(
+            uow, costo_total=CostoTotal(CachedTariffCatalog(UowTariffCatalog(uow)))
+        )
         responses = [
             self._build_meter_reading_response(
                 reading=row.reading,
@@ -264,11 +272,12 @@ class DashboardService:
                 days_since_last=row.days_since_last,
                 average_daily_consumption=row.average_daily_consumption,
                 billing_period_cost=self._calculate_interval_cost(
-                    household_id=household_id,
-                    start_date=readings[0].reading_date,
-                    end_date=row.reading.reading_date,
-                    uow=uow,
-                    billing_period=resolved_query.billing_period,
+                    billing,
+                    household,
+                    row.cumulative_consumption,
+                    readings[0].reading_date,
+                    row.reading.reading_date,
+                    resolved_query.billing_period,
                 ),
             )
             for row in rows
@@ -277,33 +286,23 @@ class DashboardService:
 
     def _calculate_interval_cost(
         self,
-        household_id: int,
+        billing: BillingService,
+        household: Household,
+        consumption: float,
         start_date: date,
         end_date: date,
-        uow: TariffConsumptionUnitofWork,
         billing_period: Optional[BillingPeriod],
     ) -> Optional[BillingPeriodCostResponse]:
-        """Calculate tariff cost for a single interval, tolerating missing tariff data."""
+        """Price one row from its cumulative Consumo; null (and a warning) if not priceable."""
+        bp_id = billing_period.id if billing_period else None
         try:
-            logger.debug(
-                f"Calculating interval cost: household_id={household_id}, start_date={start_date}, end_date={end_date}, "
-                f"billing_period_id={billing_period.id if billing_period else 'N/A'}"
+            return billing.cost_for_consumption(
+                household, Decimal(str(consumption)), start_date, end_date, bp_id, bp_id
             )
-            cost = BillingService(uow).calculate_cost_for_date_range(
-                household_id,
-                start_date,
-                end_date,
-                billing_period.id if billing_period else None,
-            )
-            logger.debug(
-                f"Calculated interval cost: household_id={household_id}, start_date={start_date}, "
-                f"end_date={end_date}, total_cost={cost.total_cost}"
-            )
-            return cost
-        except BillingServiceError as exc:
+        except CostoTotalError as exc:
             logger.warning(
-                f"Unable to calculate interval cost: household_id={household_id}, start_date={start_date}, "
-                f"end_date={end_date}, billing_period_id={billing_period.id if billing_period else 'N/A'}, reason={exc}"
+                f"Unable to calculate interval cost: household_id={household.id}, start_date={start_date}, "
+                f"end_date={end_date}, billing_period_id={bp_id}, reason={exc}"
             )
             return None
 

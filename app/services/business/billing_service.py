@@ -1,6 +1,7 @@
 """Billing orchestration - composes smaller domain services (composition over inheritance)."""
 
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from loguru import logger
@@ -93,15 +94,27 @@ class BillingService:
             household_id, start_date, end_date
         )
         try:
-            d = self.costo_total.calculate(
-                consumption, household_id, start_date, end_date, periodo_id
+            return self.cost_for_consumption(
+                household, consumption, start_date, end_date, billing_period_id, periodo_id
             )
         except CostoTotalError as exc:
             raise BillingServiceError(str(exc)) from exc
 
-        avg_daily = self.consumption_calc.calculate_average_daily(
-            household_id, start_date, end_date
+    def cost_for_consumption(
+        self,
+        household,
+        consumption,
+        start_date: date,
+        end_date: date,
+        billing_period_id: Optional[int],
+        periodo_id: Optional[int],
+    ) -> BillingPeriodCostResponse:
+        """Price an already-computed Consumo (no reading queries). Raises CostoTotalError."""
+        household_id = household.id
+        d = self.costo_total.calculate(
+            consumption, household_id, start_date, end_date, periodo_id
         )
+        avg_daily = Decimal(consumption) / Decimal((end_date - start_date).days or 1)
         base_cost, iva, dap = d.costo_base, d.iva, d.dap
         consumption_value = float(consumption)
         cfe_breakdown = CfeBillingBreakdownResponse(

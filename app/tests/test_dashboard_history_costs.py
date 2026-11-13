@@ -60,13 +60,13 @@ class HistoryRowCostTests(unittest.TestCase):
         self.assertEqual([row.billing_period_cost for row in r.readings], [None, None])
         self.assertEqual(r.readings[1].consumption_since_last, 50)
 
-    def test_row_cost_is_null_on_any_billing_service_failure(self):
+    def test_row_cost_is_null_on_any_costo_total_failure(self):
         from unittest.mock import patch
-        from services.business.billing_service import BillingServiceError
+        from services.business.costo_total import CostoTotalError
 
         with patch(
-            "services.dashboard_service.BillingService.calculate_cost_for_date_range",
-            side_effect=BillingServiceError("Household not found"),
+            "services.dashboard_service.BillingService.cost_for_consumption",
+            side_effect=CostoTotalError("boom"),
         ):
             r = DashboardService(self._seed_readings_only()).get_household_meter_readings_with_history(
                 1, start_date=date(2026, 4, 1), end_date=date(2026, 4, 30)
