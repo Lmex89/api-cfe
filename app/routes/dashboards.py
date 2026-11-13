@@ -51,6 +51,11 @@ def domain_errors_as_http():
         raise HTTPException(status_code=code, detail=exc.message) from exc
 
 
+def dashboard_service() -> DashboardService:
+    """The one DashboardService factory; reads the UoW at call time so tests can swap it."""
+    return DashboardService(TariffConsumptionUnitofWork)
+
+
 def _check_range(start_date: date, end_date: date) -> None:
     if start_date > end_date:
         raise InvalidFilterError("start_date must be before end_date")
@@ -81,9 +86,9 @@ def get_household_consumption(
     """Get household consumption overview for date range."""
     with domain_errors_as_http():
         _check_range(start_date, end_date)
-        return DashboardService(
-            TariffConsumptionUnitofWork
-        ).get_household_consumption_dashboard(household_id, start_date, end_date)
+        return dashboard_service().get_household_consumption_dashboard(
+            household_id, start_date, end_date
+        )
 
 
 @router.get(
@@ -121,9 +126,7 @@ def get_household_meter_readings_with_history(
     ),
 ) -> MeterReadingHistoryDashboardResponse:
     with domain_errors_as_http():
-        return DashboardService(
-            TariffConsumptionUnitofWork
-        ).get_household_meter_readings_with_history(
+        return dashboard_service().get_household_meter_readings_with_history(
             household_id=household_id,
             billing_period_id=billing_period_id,
             start_date=start_date,

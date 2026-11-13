@@ -1,6 +1,7 @@
 """Dashboard service with meter-reading history business logic."""
 
 from datetime import date
+from decimal import Decimal
 from typing import List, Optional
 
 from loguru import logger
@@ -23,19 +24,17 @@ from model.dashboard_serializers import (
 from model.domain.billing_period_model import BillingPeriod
 from model.domain.household_model import Household
 from model.domain.meter_reading_model import MeterReading
-from decimal import Decimal
-
+from services.business import MeterReadingConsumptionCalculator
 from services.business.billing_service import BillingService, load_household
 from services.business.costo_total import CostoTotal, CostoTotalError
 from services.business.costo_total_catalog import CachedTariffCatalog, UowTariffCatalog
-from services.business import MeterReadingConsumptionCalculator
+from services.business.history_rows import build_history_rows, daily_average
 from services.errors import (
     BillingPeriodNotFoundError,
     BillingPeriodOwnershipError,
     HouseholdNotFoundError,
     InvalidFilterError,
 )
-from services.business.history_rows import build_history_rows
 
 
 class DashboardService:
@@ -57,24 +56,25 @@ class DashboardService:
         )
         household = load_household(uow, household_id)
 
+        # Points are capped at 1000; the total uses first/last Lectura, so it is not.
         domain_readings = uow.meter_reading_repository.list(
             household_id=household_id,
             reading_date_from=start_date,
             reading_date_to=end_date,
             limit=1000,
         )
-        rows, _ = build_history_rows(domain_readings)
-        # last cumulative == last - first, as the previous first/last query gave
-        total_consumption = rows[-1].cumulative_consumption if rows else 0.0
-        avg_daily = total_consumption / ((end_date - start_date).days or 1)
+        total_consumption = MeterReadingConsumptionCalculator(uow).calculate_total(
+            household_id, start_date, end_date
+        )
+        avg_daily = daily_average(total_consumption, start_date, end_date)
 
         readings = [
             MeterReadingPointResponse(
-                date=row.reading.reading_date,
-                reading_kwh=float(row.reading.reading_kwh),
-                is_initial=bool(row.reading.is_initial),
+                date=r.reading_date,
+                reading_kwh=float(r.reading_kwh),
+                is_initial=bool(r.is_initial),
             )
-            for row in rows
+            for r in domain_readings
         ]
         logger.debug(
             f"Dashboard metrics: household_id={household_id}, readings={len(readings)}, "
@@ -111,7 +111,7 @@ class DashboardService:
         self._validate_meter_reading_filters(filters)
 
         with self._uow_factory() as uow:
-            household = self._get_household(uow, household_id)
+            household = load_household(uow, household_id, HouseholdNotFoundError)
             resolved_query = self._resolve_meter_reading_query(
                 uow=uow,
                 household_id=household_id,
@@ -170,21 +170,6 @@ class DashboardService:
                 f"is after end_date={filters.end_date}"
             )
             raise InvalidFilterError("start_date must be before end_date")
-
-    def _get_household(
-        self, uow: TariffConsumptionUnitofWork, household_id: int
-    ) -> Household:
-        """Load a household or raise a domain error."""
-        household = uow.household_repository.get(household_id)
-        if not household:
-            logger.debug(
-                f"Household not found for dashboard lookup: household_id={household_id}"
-            )
-            raise HouseholdNotFoundError("Household not found")
-        logger.debug(
-            f"Resolved household for dashboard lookup: household_id={household_id}"
-        )
-        return household
 
     def _resolve_meter_reading_query(
         self,
@@ -262,6 +247,7 @@ class DashboardService:
         billing = BillingService(
             uow, costo_total=CostoTotal(CachedTariffCatalog(UowTariffCatalog(uow)))
         )
+        bp_id = resolved_query.billing_period.id if resolved_query.billing_period else None
         responses = [
             self._build_meter_reading_response(
                 reading=row.reading,
@@ -274,7 +260,7 @@ class DashboardService:
                     row.cumulative_consumption,
                     readings[0].reading_date,
                     row.reading.reading_date,
-                    resolved_query.billing_period,
+                    bp_id,
                 ),
             )
             for row in rows
@@ -285,16 +271,15 @@ class DashboardService:
         self,
         billing: BillingService,
         household: Household,
-        consumption: float,
+        consumption: Decimal,
         start_date: date,
         end_date: date,
-        billing_period: Optional[BillingPeriod],
+        bp_id: Optional[int],
     ) -> Optional[BillingPeriodCostResponse]:
         """Price one row from its cumulative Consumo; null (and a warning) if not priceable."""
-        bp_id = billing_period.id if billing_period else None
         try:
             return billing.cost_for_consumption(
-                household, Decimal(str(consumption)), start_date, end_date, bp_id, bp_id
+                household, consumption, start_date, end_date, bp_id
             )
         except CostoTotalError as exc:
             logger.warning(

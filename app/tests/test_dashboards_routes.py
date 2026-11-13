@@ -148,21 +148,18 @@ class DashboardNoDriftTest(unittest.TestCase):
 
     def _uow_odd(self):
         uow = _uow()
-        uow.meter_reading_repository.items[:] = [
+        uow.meter_reading_repository.items.clear()
+        for r in (
             MeterReading(1, date(2026, 4, 1), Decimal("1000.1"), is_initial=True),
             MeterReading(1, date(2026, 4, 20), Decimal("1103.7")),
             MeterReading(1, date(2026, 5, 31), Decimal("1251.3")),
-        ]
+        ):
+            uow.meter_reading_repository.add(r)
         return uow
 
     def _expected_avg(self, uow):
-        from services.business import MeterReadingConsumptionCalculator
-
-        return float(
-            MeterReadingConsumptionCalculator(uow).calculate_average_daily(
-                1, date(2026, 4, 1), date(2026, 5, 31)
-            )
-        )
+        # (1251.3 - 1000.1) kWh over the 60 days from Apr 1 to May 31, in Decimal
+        return float(Decimal("251.2") / Decimal(60))
 
     def test_promedio_diario_de_la_vivienda_coincide_con_el_calculador(self):
         uow = self._uow_odd()

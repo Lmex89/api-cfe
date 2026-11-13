@@ -44,12 +44,23 @@ class CachedTariffCatalog:
             self._cache[key] = getattr(self._inner, name)(*args)
         return self._cache[key]
 
-    def vivienda(self, *a): return self._get("vivienda", *a)
-    def periodo(self, *a): return self._get("periodo", *a)
-    def asignaciones(self, *a): return self._get("asignaciones", *a)
-    def tarifa(self, *a): return self._get("tarifa", *a)
-    def version(self, *a): return self._get("version", *a)
-    def rangos(self, *a): return self._get("rangos", *a)
+    def vivienda(self, vivienda_id):
+        return self._get("vivienda", vivienda_id)
+
+    def periodo(self, periodo_id):
+        return self._get("periodo", periodo_id)
+
+    def asignaciones(self, vivienda_id):
+        return self._get("asignaciones", vivienda_id)
+
+    def tarifa(self, tariff_id):
+        return self._get("tarifa", tariff_id)
+
+    def version(self, tariff_id, year, month):
+        return self._get("version", tariff_id, year, month)
+
+    def rangos(self, version_id):
+        return self._get("rangos", version_id)
 
 
 class InMemoryTariffCatalog:
