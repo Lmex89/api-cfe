@@ -73,7 +73,9 @@ app/
       billing_service.py        # BillingService: period cost + multi-period summary (consumption + Costo total -> response)
       costo_total.py            # CostoTotal: sole module pricing a Consumo (Asignación, Fecha efectiva, segments, proration, taxes)
       costo_total_catalog.py    # TariffCatalog adapters: UowTariffCatalog (prod), InMemoryTariffCatalog (tests)
+      history_rows.py           # build_history_rows: pure derivation of per-reading history rows (cumulative Consumo, deltas)
       period_utils.py           # Billing period date/segment utilities (midpoint_date, MonthSegment, split_by_month_segments)
+    errors.py                   # Domain errors (no HTTP): DashboardDomainError -> InvalidFilterError, HouseholdNotFoundError, BillingPeriodNotFoundError, BillingPeriodOwnershipError
     dashboard_service.py        # DashboardService: household consumption dashboard + meter-reading history (filters, validation, cost per interval)
     constants.py                # URL-shortener constants (legacy: HOST_URL, CREATE/DELETE_API_KEY, TIME_EXPIRATION_URL)
     *_handler.py       # CRUD/service methods per domain
@@ -118,7 +120,11 @@ Dashboard endpoints live in `routes/dashboards.py` and are **auth-protected** (`
 - **`services/dashboard_service.py` (`DashboardService`)** — the service layer for the meter-reading history use-case. Owns a UoW factory (`TariffConsumptionUnitofWork` by default), validates filters, resolves the effective date range, fetches readings via `meter_reading_repository.get_by_billing_period_and_date_range`, and builds a per-reading history with cumulative cost per interval (pricing each interval with `CostoTotal`). Also serves the household consumption dashboard (`get_household_consumption_dashboard`, raises `BillingServiceError` 422 for a missing household). Tolerates `CostoTotalError` per interval (sets `billing_period_cost=None`).
   - Validation: **400** if neither `billing_period_id` nor a complete `start_date`+`end_date` range is provided; **400** if `start_date > end_date`; **404** for missing household/billing period; **400** if the billing period does not belong to the household.
 - **`services/business/costo_total.py` (`CostoTotal`)** — the single module that prices a Consumo. `calculate(consumo, vivienda_id, start, end, periodo_id=None)` returns a `Desglose`; a Periodo, if given, is read once and its end date replaces `end` for Fecha efectiva and segmentation. Its only seam is a `TariffCatalog` (`UowTariffCatalog` in production, `InMemoryTariffCatalog` in tests). Raises `CostoTotalError` subclasses only.
-- **`services/business/billing_service.py` (`BillingService`)** — wraps `CostoTotal` + `MeterReadingConsumptionCalculator` into `BillingPeriodCostResponse`: `calculate_billing_period_cost`, `calculate_cost_for_date_range`, `get_multiple_periods_summary`. Maps `CostoTotalError` to `BillingServiceError(message, 422)`.
+- **`services/business/billing_service.py` (`BillingService`)** — wraps `CostoTotal` + `MeterReadingConsumptionCalculator` into `BillingPeriodCostResponse`: `calculate_billing_period_cost`, `calculate_cost_for_date_range`, `get_multiple_periods_summary`. Maps `CostoTotalError` to `BillingServiceError(message)`; `BillingServiceError` carries no status code (routes map it to 422). `load_household` is the shared household lookup raising it.
+
+- **`CachedTariffCatalog`** (`costo_total_catalog.py`) — memoizing decorator over a `TariffCatalog`; the history flow wraps `UowTariffCatalog` in it so per-row pricing does not re-query the tariff data.
+- **`services/business/history_rows.py` (`build_history_rows`)** — pure function turning ordered readings into rows (cumulative Consumo, since-last delta/days/avg) plus total; used by both dashboard use-cases.
+- **Single status map** — `routes/dashboards.py` `HTTP_STATUS_BY_ERROR` (looked up via MRO in `domain_errors_as_http`) is the only place domain errors become HTTP: `InvalidFilterError`/`BillingPeriodOwnershipError` 400, `HouseholdNotFoundError`/`BillingPeriodNotFoundError` 404, `BillingServiceError` 422. Services raise `services/errors.py` types only; the `start_date > end_date` route checks raise `InvalidFilterError` too.
 
 ### Dashboard Serializers
 
@@ -385,7 +391,7 @@ Add to `.env` for cloud backup:
 2. Add Pydantic serializer in `model/<entity>_serializers.py` (or `model/dashboard_serializers.py` for dashboard responses)
 3. Register router in `app/routes/api.py`
 4. Add repository methods in `app/db/repositories/<entity>_repository.py` if needed
-5. For dashboard use-cases, add business logic to `services/business/costo_total.py` / `billing_service.py` (`BillingService`) and/or `services/dashboard_service.py` (`DashboardService`) rather than querying repositories directly from the route — dashboard routes are auth-protected via `Depends(get_current_user)` and raise `BillingServiceError` (mapped to HTTP status from the exception) or `HTTPException` for input errors.
+5. For dashboard use-cases, add business logic to `services/business/costo_total.py` / `billing_service.py` (`BillingService`) and/or `services/dashboard_service.py` (`DashboardService`) rather than querying repositories directly from the route — dashboard routes are auth-protected via `Depends(get_current_user)` and raise domain errors (`services/errors.py`) or `BillingServiceError`; routes wrap calls in `domain_errors_as_http()` (single status map, `BillingServiceError` -> 422).
 
 ### Adding a New Domain Entity
 

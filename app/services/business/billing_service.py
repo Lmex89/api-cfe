@@ -27,6 +27,15 @@ class BillingServiceError(Exception):
         self.message = message
 
 
+def load_household(uow, household_id: int):
+    """Load a household or raise BillingServiceError (routes map it to 422)."""
+    household = uow.household_repository.get(household_id)
+    if not household:
+        logger.debug(f"Household not found: household_id={household_id}")
+        raise BillingServiceError("Household not found")
+    return household
+
+
 class BillingService:
     """
     OCP: Open/Closed Principle
@@ -87,9 +96,7 @@ class BillingService:
         billing_period_id: Optional[int],
         periodo_id: Optional[int],
     ) -> BillingPeriodCostResponse:
-        household = self.uow.household_repository.get(household_id)
-        if not household:
-            raise BillingServiceError("Household not found")
+        household = load_household(self.uow, household_id)
         consumption = self.consumption_calc.calculate_total(
             household_id, start_date, end_date
         )
@@ -167,10 +174,7 @@ class BillingService:
         logger.info(
             f"Building periods summary for household_id={household_id}, start_date={start_date}, end_date={end_date}"
         )
-        household = self.uow.household_repository.get(household_id)
-        if not household:
-            logger.debug(f"Household not found: household_id={household_id}")
-            raise BillingServiceError("Household not found")
+        household = load_household(self.uow, household_id)
 
         periods: list[BillingPeriod] = self.uow.billing_period_repository.list(
             household_id=household_id, limit=1000

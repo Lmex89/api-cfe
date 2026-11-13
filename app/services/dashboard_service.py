@@ -25,7 +25,7 @@ from model.domain.household_model import Household
 from model.domain.meter_reading_model import MeterReading
 from decimal import Decimal
 
-from services.business.billing_service import BillingService, BillingServiceError
+from services.business.billing_service import BillingService, load_household
 from services.business.costo_total import CostoTotal, CostoTotalError
 from services.business.costo_total_catalog import CachedTariffCatalog, UowTariffCatalog
 from services.business import MeterReadingConsumptionCalculator
@@ -55,10 +55,7 @@ class DashboardService:
         logger.info(
             f"Building household dashboard for household_id={household_id}, start_date={start_date}, end_date={end_date}"
         )
-        household = uow.household_repository.get(household_id)
-        if not household:
-            logger.debug(f"Household not found: household_id={household_id}")
-            raise BillingServiceError("Household not found")
+        household = load_household(uow, household_id)
 
         domain_readings = uow.meter_reading_repository.list(
             household_id=household_id,
@@ -114,7 +111,7 @@ class DashboardService:
         self._validate_meter_reading_filters(filters)
 
         with self._uow_factory() as uow:
-            household = self._get_household_or_404(uow, household_id)
+            household = self._get_household(uow, household_id)
             resolved_query = self._resolve_meter_reading_query(
                 uow=uow,
                 household_id=household_id,
@@ -174,7 +171,7 @@ class DashboardService:
             )
             raise InvalidFilterError("start_date must be before end_date")
 
-    def _get_household_or_404(
+    def _get_household(
         self, uow: TariffConsumptionUnitofWork, household_id: int
     ) -> Household:
         """Load a household or raise a domain error."""
@@ -207,7 +204,7 @@ class DashboardService:
                 end_date=filters.end_date,
             )
 
-        billing_period = self._get_billing_period_or_404(uow, filters.billing_period_id)
+        billing_period = self._get_billing_period(uow, filters.billing_period_id)
         if billing_period.household_id != household_id:
             logger.debug(
                 f"Billing period ownership mismatch: billing_period_id={filters.billing_period_id}, "
@@ -227,7 +224,7 @@ class DashboardService:
             billing_period=billing_period,
         )
 
-    def _get_billing_period_or_404(
+    def _get_billing_period(
         self, uow: TariffConsumptionUnitofWork, billing_period_id: int
     ) -> BillingPeriod:
         """Load a billing period or raise a domain error."""

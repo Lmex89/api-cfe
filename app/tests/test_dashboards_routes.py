@@ -143,5 +143,62 @@ class DashboardViviendaTest(unittest.TestCase):
         self.assertEqual(body["total_cost"], 0)
 
 
+class DashboardNoDriftTest(unittest.TestCase):
+    """Average daily kWh must equal the Decimal calculator's value exactly."""
+
+    def _uow_odd(self):
+        uow = _uow()
+        uow.meter_reading_repository.items[:] = [
+            MeterReading(1, date(2026, 4, 1), Decimal("1000.1"), is_initial=True),
+            MeterReading(1, date(2026, 4, 20), Decimal("1103.7")),
+            MeterReading(1, date(2026, 5, 31), Decimal("1251.3")),
+        ]
+        return uow
+
+    def _expected_avg(self, uow):
+        from services.business import MeterReadingConsumptionCalculator
+
+        return float(
+            MeterReadingConsumptionCalculator(uow).calculate_average_daily(
+                1, date(2026, 4, 1), date(2026, 5, 31)
+            )
+        )
+
+    def test_promedio_diario_de_la_vivienda_coincide_con_el_calculador(self):
+        uow = self._uow_odd()
+        expected = self._expected_avg(uow)
+        with make_client(uow) as client:
+            body = client.get(
+                "/api/v1/dashboards/household/1/consumption?start_date=2026-04-01&end_date=2026-05-31"
+            ).json()
+        self.assertEqual(body["average_daily_kwh"], expected)
+
+    def test_promedio_diario_del_costo_coincide_con_el_calculador(self):
+        uow = self._uow_odd()
+        expected = self._expected_avg(uow)
+        with make_client(uow) as client:
+            body = client.get("/api/v1/dashboards/billing-period/1").json()
+        self.assertEqual(body["average_daily_kwh"], expected)
+
+
+class DashboardHistoryRouteTest(unittest.TestCase):
+    def test_historial_de_lecturas_responde_200_con_la_forma_esperada(self):
+        with make_client(_uow()) as client:
+            r = client.get("/api/v1/dashboards/household/1/meter-readings?billing_period_id=1")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(
+            set(body),
+            {"household", "billing_period", "period", "number_of_readings",
+             "total_consumption_kwh", "readings"},
+        )
+        self.assertEqual(body["total_consumption_kwh"], 250)
+        self.assertEqual(body["number_of_readings"], 2)
+        last = body["readings"][-1]
+        self.assertEqual(last["consumption_since_last"], 250)
+        self.assertEqual(last["billing_period_cost"]["total_cost_witout_taxes"], 300)
+        self.assertAlmostEqual(last["billing_period_cost"]["total_cost"], 363)
+
+
 if __name__ == "__main__":
     unittest.main()

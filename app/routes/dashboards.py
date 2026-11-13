@@ -45,9 +45,15 @@ def domain_errors_as_http():
     try:
         yield
     except tuple(HTTP_STATUS_BY_ERROR) as exc:
-        raise HTTPException(
-            status_code=HTTP_STATUS_BY_ERROR[type(exc)], detail=exc.message
-        ) from exc
+        code = next(
+            HTTP_STATUS_BY_ERROR[c] for c in type(exc).__mro__ if c in HTTP_STATUS_BY_ERROR
+        )
+        raise HTTPException(status_code=code, detail=exc.message) from exc
+
+
+def _check_range(start_date: date, end_date: date) -> None:
+    if start_date > end_date:
+        raise InvalidFilterError("start_date must be before end_date")
 
 
 @router.get(
@@ -73,13 +79,8 @@ def get_household_consumption(
     end_date: date = Query(..., description="Period end (YYYY-MM-DD)"),
 ) -> HouseholdConsumptionDashboardResponse:
     """Get household consumption overview for date range."""
-    if start_date > end_date:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="start_date must be before end_date",
-        )
-
     with domain_errors_as_http():
+        _check_range(start_date, end_date)
         return DashboardService(
             TariffConsumptionUnitofWork
         ).get_household_consumption_dashboard(household_id, start_date, end_date)
@@ -95,16 +96,12 @@ def get_household_billing_summary(
     end_date: date = Query(..., description="Summary end (YYYY-MM-DD)"),
 ) -> MultiplePeriodsSummaryResponse:
     """Get multi-period billing comparison for household."""
-    if start_date > end_date:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="start_date must be before end_date",
-        )
-
-    with domain_errors_as_http(), TariffConsumptionUnitofWork() as uow:
-        return BillingService(uow).get_multiple_periods_summary(
-            household_id, start_date, end_date
-        )
+    with domain_errors_as_http():
+        _check_range(start_date, end_date)
+        with TariffConsumptionUnitofWork() as uow:
+            return BillingService(uow).get_multiple_periods_summary(
+                household_id, start_date, end_date
+            )
 
 
 @router.get(

@@ -50,6 +50,20 @@ class HistoryDomainErrorsToHttpTest(unittest.TestCase):
         self.assertEqual(self.status(H + "?billing_period_id=99"), 404)
 
 
+class SubclassErrorMappingTest(unittest.TestCase):
+    def test_subclase_de_error_de_dominio_se_mapea_como_su_base(self):
+        from fastapi import HTTPException
+        from routes.dashboards import domain_errors_as_http
+
+        class Sub(InvalidFilterError):
+            pass
+
+        with self.assertRaises(HTTPException) as cm:
+            with domain_errors_as_http():
+                raise Sub("x")
+        self.assertEqual(cm.exception.status_code, 400)
+
+
 class ServicesRaiseOnlyDomainErrorsTest(unittest.TestCase):
     def history(self, **kw):
         return DashboardService(_uow()).get_household_meter_readings_with_history(**kw)
