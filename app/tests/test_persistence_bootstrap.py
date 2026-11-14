@@ -11,6 +11,37 @@ from model.domain.tariff_model import Tariff  # type: ignore[import-not-found]
 
 
 class PersistenceBootstrapTests(unittest.TestCase):
+    def test_fake_backed_vivienda_route_needs_no_database_bootstrap(self) -> None:
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"DB_HOST", "DB_PORT", "DB_USER", "DB_PSWD", "DB_NAME"}
+        }
+        env["SECRET_KEY"] = "x" * 64
+        script = """
+import os
+import sys
+class NoMysqlDrivers:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'MySQLdb', 'pymysql'}:
+            raise ModuleNotFoundError(f'blocked {fullname}')
+sys.meta_path.insert(0, NoMysqlDrivers())
+sys.path.insert(0, 'tests')
+from fakes import FakeUoW, make_client
+from model.domain.household_model import Household
+uow = FakeUoW()
+uow.household_repository.add(Household(name='Casa'))
+with make_client(uow) as client:
+    response = client.get('/api/v1/households')
+assert response.status_code == 200
+assert [item['name'] for item in response.json()] == ['Casa']
+assert not ({'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PSWD', 'DB_NAME'} & os.environ.keys())
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script], env=env, capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_importer_session_policy_keeps_driver_default_isolation(self) -> None:
         from db.database import create_session_factory
 
