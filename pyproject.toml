@@ -1,0 +1,22 @@
+[tool.ruff]
+target-version = "py312"
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "D", "C90", "PLR0913"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 5
+
+[tool.ruff.lint.per-file-ignores]
+"app/tests/**" = ["D"]
+"**/__init__.py" = ["D"]
+[tool.mypy]
+python_version = "3.12"
+strict = true
