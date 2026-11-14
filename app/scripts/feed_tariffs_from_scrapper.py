@@ -293,9 +293,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         from dotenv import load_dotenv
 
         load_dotenv(args.env_file, override=False)
-    # common.config raises if SECRET_KEY is unset; the feed only needs DB_* vars.
-    os.environ.setdefault("SECRET_KEY", "0" * 64)
-
     logger.remove()
     logger.add(sys.stderr, level=args.log_level.upper())
 
@@ -303,27 +300,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not os.getenv(var):
             parser.error(f"Missing environment variable {var} (use --env-file)")
 
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    import pymysql
-
-    # The app expects the mysqlclient DBAPI; locally we use PyMySQL as a
-    # drop-in via the MySQLdb alias so db.uow/db.database imports succeed.
-    pymysql.install_as_MySQLdb()
-
+    from db.database import create_session_factory
     from db.orm import start_mappers
     from db.uow import TariffConsumptionUnitofWork
 
     start_mappers()
 
-    engine = create_engine(
+    session_factory = create_session_factory(
         f"mysql+pymysql://{os.getenv('DB_USER')}:{os.getenv('DB_PSWD')}"
         f"@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
         "?charset=utf8mb4",
-        pool_pre_ping=True,
     )
-    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
 
     combos = load_scraped_combos(Path(args.sqlite), args.tariffs, args.months)
     logger.info(

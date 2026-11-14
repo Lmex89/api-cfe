@@ -11,6 +11,18 @@ from model.domain.tariff_model import Tariff  # type: ignore[import-not-found]
 
 
 class PersistenceBootstrapTests(unittest.TestCase):
+    def test_importer_session_policy_keeps_driver_default_isolation(self) -> None:
+        from db.database import create_session_factory
+
+        with patch("db.database.create_engine") as create, patch(
+            "db.database.sessionmaker"
+        ) as maker:
+            create_session_factory("mysql+pymysql://u:p@localhost/db?charset=utf8mb4")
+        create.assert_called_once_with(
+            "mysql+pymysql://u:p@localhost/db?charset=utf8mb4", pool_pre_ping=True
+        )
+        maker.assert_called_once_with(bind=create.return_value, expire_on_commit=False)
+
     def test_real_uow_commits_and_rolls_back_tariffs(self) -> None:
         script = """
 from sqlalchemy import create_engine
@@ -51,16 +63,86 @@ with tempfile.TemporaryDirectory() as directory:
         db.execute('CREATE TABLE tiers (tariff_id INTEGER, year INTEGER, '
                    'month INTEGER, season TEXT, tier_order INTEGER, '
                    'max_kwh REAL, price_kwh REAL)')
-    session = MagicMock()
-    factory = MagicMock(return_value=session)
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from db.orm import tariffs_table, tariff_versions_table, tariff_ranges_table
+    engine = create_engine('sqlite://')
+    for table in (tariffs_table, tariff_versions_table, tariff_ranges_table):
+        table.create(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
     env = {'DB_HOST': 'localhost', 'DB_PORT': '3306', 'DB_USER': 'u',
            'DB_PSWD': 'p', 'DB_NAME': 'db'}
     with patch.dict(os.environ, env, clear=True), \\
-         patch('sqlalchemy.create_engine'), \\
-         patch('sqlalchemy.orm.sessionmaker', return_value=factory):
+         patch('db.database.create_session_factory', return_value=factory) as build:
         assert main(['--sqlite', path, '--env-file', directory + '/missing']) == 0
-    assert session.close.called
-    assert not session.commit.called
+        assert 'SECRET_KEY' not in os.environ
+        build.assert_called_once_with(
+            'mysql+pymysql://u:p@localhost:3306/db?charset=utf8mb4')
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_importer_persists_and_recovers_using_real_uow(self) -> None:
+        script = """
+import os
+import sqlite3
+import tempfile
+from unittest.mock import patch
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from db.orm import start_mappers, tariffs_table, tariff_versions_table, tariff_ranges_table
+from db.uow import TariffConsumptionUnitofWork
+from scripts.feed_tariffs_from_scrapper import main
+with tempfile.TemporaryDirectory() as directory:
+    path = directory + '/input.db'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE tariffs (id INTEGER, code TEXT)')
+        db.execute('CREATE TABLE tiers (tariff_id INTEGER, year INTEGER, '
+                   'month INTEGER, season TEXT, tier_order INTEGER, '
+                   'max_kwh REAL, price_kwh TEXT)')
+        db.execute("INSERT INTO tariffs VALUES (1, '1C')")
+        db.executemany('INSERT INTO tiers VALUES (1, 2026, ?, ?, ?, ?, ?)', [
+            (1, 'fuera de verano', 2, None, '2.0'),
+            (1, 'fuera de verano', 1, 75, '1.0'),
+            (2, 'fuera de verano', 1, 75, 'bad'),
+            (3, 'fuera de verano', 1, 80, '1.5')])
+    engine = create_engine('sqlite://')
+    for table in (tariffs_table, tariff_versions_table, tariff_ranges_table):
+        table.create(engine)
+    start_mappers()
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    env = {'DB_HOST': 'localhost', 'DB_PORT': '3306', 'DB_USER': 'u',
+           'DB_PSWD': 'p', 'DB_NAME': 'db'}
+    args = ['--sqlite', path, '--env-file', directory + '/missing']
+    with patch.dict(os.environ, env, clear=True), \\
+         patch('db.database.create_session_factory', return_value=factory), \\
+         patch('db.orm.start_mappers'), \\
+         patch('scripts.feed_tariffs_from_scrapper.logger.info') as info:
+        assert main(args) == 1
+        assert info.call_args.args[2:] == (2, 0, 0, 1)
+        assert 'SECRET_KEY' not in os.environ
+        with TariffConsumptionUnitofWork(factory) as uow:
+            tariff = uow.tariff_repository.get_by_code('1C')
+            january = uow.tariff_version_repository.get_by_tariff_and_period(
+                tariff.id, 2026, 1)
+            assert uow.tariff_version_repository.get_by_tariff_and_period(
+                tariff.id, 2026, 2) is None
+            ranges = uow.tariff_range_repository.list(tariff_version_id=january.id)
+            assert [(r.range_min, r.range_max) for r in ranges] == [(0, 75), (75, None)]
+        assert main(args + ['--dry-run']) == 0
+        assert info.call_args.args[2:] == (1, 0, 2, 0)
+        with sqlite3.connect(path) as db:
+            db.execute("UPDATE tiers SET price_kwh='3.0' WHERE month=1 AND tier_order=1")
+            db.execute("DELETE FROM tiers WHERE month=2")
+        assert main(args) == 0
+        assert info.call_args.args[2:] == (0, 0, 2, 0)
+        assert main(args + ['--overwrite', '--months', '1']) == 0
+        assert info.call_args.args[2:] == (0, 1, 0, 0)
+        with TariffConsumptionUnitofWork(factory) as uow:
+            ranges = uow.tariff_range_repository.list(tariff_version_id=january.id)
+            assert len(ranges) == 2 and ranges[0].price_per_kwh == 3
 """
         result = subprocess.run(
             [sys.executable, "-c", script], capture_output=True, text=True

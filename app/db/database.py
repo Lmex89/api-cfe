@@ -11,6 +11,15 @@ _lock = Lock()
 _factory = None
 
 
+def create_session_factory(url: str, isolation_level: str | None = None) -> Any:
+    """Build a session factory with the requested runtime's isolation policy."""
+    options: dict[str, Any] = {"pool_pre_ping": True}
+    if isolation_level is not None:
+        options["isolation_level"] = isolation_level
+    engine = create_engine(url, **options)
+    return sessionmaker(bind=engine, expire_on_commit=False)
+
+
 def default_session_factory() -> Any:
     """Return the process-wide production session factory."""
     global _factory
@@ -22,8 +31,5 @@ def default_session_factory() -> Any:
             port = os.getenv("DB_PORT")
             database = os.getenv("DB_NAME")
             url = f"mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
-            engine = create_engine(
-                url, isolation_level="REPEATABLE READ", pool_pre_ping=True
-            )
-            _factory = sessionmaker(bind=engine, expire_on_commit=False)
+            _factory = create_session_factory(url, isolation_level="REPEATABLE READ")
         return _factory
