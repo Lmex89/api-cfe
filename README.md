@@ -70,6 +70,21 @@ source .venv/bin/activate
 pip install -r requirements.pip
 ```
 
+### Development checks
+
+From the repository root, activate the `app/.venv` environment and run:
+
+```bash
+pip install -r app/requirements-dev.pip
+pre-commit install
+pre-commit run --all-files
+```
+
+Ruff's per-file lint ignores and formatter exclusions baseline existing
+violations. Remove exceptions as files are cleaned up; a file-level ignore
+also suppresses new violations of that same rule in the file. Formatting
+existing excluded files is deferred because 57 files would change.
+
 ## Running Locally
 
 From the `app/` directory:

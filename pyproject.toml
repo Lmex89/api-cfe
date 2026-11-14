@@ -1,0 +1,169 @@
+[tool.ruff]
+target-version = "py312"
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "D", "C90", "PLR0913"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"app/tests/**" = ["D"]
+"**/__init__.py" = ["D"]
+# Existing violations: remove entries as each file is cleaned up.
+"app/common/api/errors/http_error.py" = ["D100", "D103", "I001"]
+"app/common/api/errors/validation_error.py" = ["D100", "D103", "E501", "F401", "I001"]
+"app/common/api/responses.py" = ["D100", "E501", "I001"]
+"app/common/config.py" = ["D100", "D101", "E501", "F401", "I001"]
+"app/common/db/abstract_unit_of_work.py" = ["D100", "D101", "D102", "D105"]
+"app/common/db/base.py" = ["D100", "D101", "D102", "F401", "I001"]
+"app/common/logging.py" = ["D100", "D101", "D102", "I001"]
+"app/common/model/rest.py" = ["D100", "D101", "F401", "I001"]
+"app/common/services/auth_audit.py" = ["D200", "D212", "E501", "I001"]
+"app/common/services/auth_dependency.py" = ["D212", "I001"]
+"app/common/services/security.py" = ["D100", "D107", "D205", "D212", "I001"]
+"app/common/services/time_decorator.py" = ["D100", "D103", "I001"]
+"app/db/database.py" = ["D100", "F401", "I001"]
+"app/db/orm.py" = ["D100", "D103", "E501", "F401", "I001"]
+"app/db/repositories/billing_period_repository.py" = ["D100", "D101", "D102", "D107"]
+"app/db/repositories/household_repository.py" = ["D100", "D101", "D102", "D107"]
+"app/db/repositories/household_tariff_repository.py" = ["D100", "D101", "D102", "D107"]
+"app/db/repositories/meter_reading_repository.py" = ["D100", "D101", "D102", "D107", "E501", "F401"]
+"app/db/repositories/tariff_range_repository.py" = ["D100", "D101", "D102", "D107"]
+"app/db/repositories/tariff_repository.py" = ["D100", "D101", "D102", "D107"]
+"app/db/repositories/tariff_version_repository.py" = ["D100", "D101", "D102", "D107", "E501"]
+"app/db/repositories/url_repository.py" = ["D100", "D101", "D102", "D107", "F401", "I001"]
+"app/db/repositories/user_repository.py" = ["D100", "D101", "D102", "D107"]
+"app/db/uow.py" = ["D100", "D101", "D102", "D105", "I001"]
+"app/main.py" = ["D100", "D103", "I001"]
+"app/middleware/rate_limit.py" = ["D101", "D102", "D107", "D200", "D212", "F401", "I001"]
+"app/model/auth.py" = ["D100", "D101", "D102", "E501"]
+"app/model/billing_period_serializers.py" = ["D100", "D101", "D106"]
+"app/model/dashboard_serializers.py" = ["D100", "D101"]
+"app/model/domain/billing_period_model.py" = ["D100", "D101"]
+"app/model/domain/household_model.py" = ["D100", "D101"]
+"app/model/domain/household_tariff_model.py" = ["D100", "D101"]
+"app/model/domain/meter_reading_model.py" = ["D100", "D101"]
+"app/model/domain/tariff_model.py" = ["D100", "D101"]
+"app/model/domain/tariff_range_model.py" = ["D100", "D101"]
+"app/model/domain/tariff_version_model.py" = ["D100", "D101"]
+"app/model/domain/url_model.py" = ["D100", "D101", "D102", "D105", "E501"]
+"app/model/domain/user_model.py" = ["D100", "D101", "D107", "PLR0913"]
+"app/model/errors.py" = ["D100", "D101", "D102", "D103", "D107", "F401", "I001"]
+"app/model/household_serializers.py" = ["D100", "D101", "D106"]
+"app/model/household_tariff_serializers.py" = ["D100", "D101", "D106"]
+"app/model/meter_reading_serializers.py" = ["D100", "D101", "D106"]
+"app/model/serializers.py" = ["D100", "D101", "D106"]
+"app/model/tariff_range_serializers.py" = ["D100", "D101", "D106"]
+"app/model/tariff_serializers.py" = ["D100", "D101", "D106"]
+"app/model/tariff_version_serializers.py" = ["D100", "D101", "D106"]
+"app/routes/api.py" = ["D100", "I001"]
+"app/routes/auth.py" = ["D103", "D212", "E501", "I001"]
+"app/routes/billing_periods.py" = ["D100", "D103", "E501", "I001"]
+"app/routes/controller.py" = ["D100", "D103", "E501", "I001"]
+"app/routes/dashboards.py" = ["D103", "E501", "I001"]
+"app/routes/household_tariffs.py" = ["D100", "D103", "E501", "I001"]
+"app/routes/households.py" = ["D100", "D103", "I001"]
+"app/routes/meter_readings.py" = ["D100", "D103", "E501", "I001", "PLR0913"]
+"app/routes/tariff_ranges.py" = ["D100", "D103", "E501", "I001"]
+"app/routes/tariff_versions.py" = ["D100", "D103", "E501", "I001"]
+"app/routes/tariffs.py" = ["D100", "D103", "I001"]
+"app/scripts/feed_tariffs_from_scrapper.py" = ["C901", "E501", "I001"]
+"app/services/billing_period_handler.py" = ["D100", "D103", "I001"]
+"app/services/business/billing_service.py" = ["D101", "D107", "D205", "D212", "E501", "I001"]
+"app/services/business/costo_total.py" = ["D101", "D102", "D107", "E501"]
+"app/services/business/costo_total_catalog.py" = ["D101", "D102", "D107", "E501"]
+"app/services/business/history_rows.py" = ["D101", "E501"]
+"app/services/business/period_utils.py" = ["D103", "D212"]
+"app/services/constants.py" = ["D100", "I001"]
+"app/services/dashboard_service.py" = ["D107", "E501", "I001", "PLR0913"]
+"app/services/errors.py" = ["D101", "D107"]
+"app/services/household_handler.py" = ["D100", "D103", "I001"]
+"app/services/household_tariff_handler.py" = ["D100", "D103", "I001"]
+"app/services/meter_reading_handler.py" = ["D100", "D103", "E501", "I001", "PLR0913"]
+"app/services/tariff_handler.py" = ["D100", "D103", "I001"]
+"app/services/tariff_range_handler.py" = ["D100", "D103", "I001"]
+"app/services/tariff_version_handler.py" = ["D100", "D103", "E501", "I001"]
+"app/services/tariff_version_normalizer.py" = ["D103"]
+"app/tests/fakes.py" = ["E402", "E501"]
+"app/tests/test_billing_periods_routes.py" = ["E501"]
+"app/tests/test_costo_total.py" = ["E501", "E741", "I001"]
+"app/tests/test_costo_total_characterization.py" = ["E501", "E741", "I001"]
+"app/tests/test_costo_total_pricing.py" = ["E501", "I001"]
+"app/tests/test_dashboard_error_mapping.py" = ["E501", "I001"]
+"app/tests/test_dashboard_history_costs.py" = ["E501", "I001"]
+"app/tests/test_dashboards_routes.py" = ["E501", "E741", "I001"]
+"app/tests/test_error_responses.py" = ["E501"]
+"app/tests/test_feed_tariffs_from_scrapper.py" = ["E501", "F841", "I001"]
+"app/tests/test_history_rows.py" = ["I001"]
+"app/tests/test_history_single_load.py" = ["E501", "I001"]
+"app/tests/test_households_routes.py" = ["I001"]
+"app/tests/test_households_routes_crud.py" = ["E501", "I001"]
+"app/tests/test_meter_readings_routes.py" = ["E501"]
+"app/tests/test_period_rules.py" = ["E501", "I001"]
+"app/tests/test_security_and_rate_limit.py" = ["E402", "E501", "I001"]
+"app/tests/test_tariff_model_routes.py" = ["E501"]
+"app/tests/test_uow_tariff_catalog.py" = ["E501", "I001"]
+
+[tool.ruff.format]
+# Deferred existing formatting; remove a path when formatting that file.
+exclude = [
+    "app/common/api/errors/http_error.py",
+    "app/common/api/errors/validation_error.py",
+    "app/common/api/responses.py",
+    "app/common/config.py",
+    "app/common/db/base.py",
+    "app/common/logging.py",
+    "app/common/services/auth_audit.py",
+    "app/common/services/security.py",
+    "app/common/services/time_decorator.py",
+    "app/db/orm.py",
+    "app/db/repositories/meter_reading_repository.py",
+    "app/db/repositories/tariff_range_repository.py",
+    "app/db/repositories/tariff_version_repository.py",
+    "app/db/uow.py",
+    "app/main.py",
+    "app/middleware/rate_limit.py",
+    "app/model/auth.py",
+    "app/model/dashboard_serializers.py",
+    "app/model/domain/meter_reading_model.py",
+    "app/model/serializers.py",
+    "app/routes/auth.py",
+    "app/routes/billing_periods.py",
+    "app/routes/controller.py",
+    "app/routes/dashboards.py",
+    "app/routes/household_tariffs.py",
+    "app/routes/meter_readings.py",
+    "app/routes/tariff_ranges.py",
+    "app/routes/tariff_versions.py",
+    "app/scripts/feed_tariffs_from_scrapper.py",
+    "app/services/business/billing_service.py",
+    "app/services/business/costo_total.py",
+    "app/services/business/costo_total_catalog.py",
+    "app/services/business/period_utils.py",
+    "app/services/constants.py",
+    "app/services/dashboard_service.py",
+    "app/services/meter_reading_handler.py",
+    "app/services/tariff_handler.py",
+    "app/services/tariff_version_handler.py",
+    "app/tests/fakes.py",
+    "app/tests/test_auth_routes.py",
+    "app/tests/test_billing_periods_routes.py",
+    "app/tests/test_costo_total.py",
+    "app/tests/test_costo_total_characterization.py",
+    "app/tests/test_costo_total_pricing.py",
+    "app/tests/test_dashboard_error_mapping.py",
+    "app/tests/test_dashboard_history_costs.py",
+    "app/tests/test_dashboards_routes.py",
+    "app/tests/test_error_responses.py",
+    "app/tests/test_feed_tariffs_from_scrapper.py",
+    "app/tests/test_history_rows.py",
+    "app/tests/test_history_single_load.py",
+    "app/tests/test_households_routes_crud.py",
+    "app/tests/test_meter_readings_routes.py",
+    "app/tests/test_period_rules.py",
+    "app/tests/test_security_and_rate_limit.py",
+    "app/tests/test_tariff_model_routes.py",
+    "app/tests/test_uow_tariff_catalog.py",
+]
