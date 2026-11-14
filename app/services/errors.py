@@ -2,22 +2,25 @@
 
 
 class DashboardDomainError(Exception):
+    """Base error for dashboard requests."""
+
     def __init__(self, message: str):
+        """Initialize the error with a message."""
         super().__init__(message)
         self.message = message
 
 
 class InvalidFilterError(DashboardDomainError):
-    pass
+    """The supplied dashboard filters are invalid."""
 
 
 class HouseholdNotFoundError(DashboardDomainError):
-    pass
+    """The requested household does not exist."""
 
 
 class BillingPeriodNotFoundError(DashboardDomainError):
-    pass
+    """The requested billing period does not exist."""
 
 
 class BillingPeriodOwnershipError(DashboardDomainError):
-    pass
+    """The billing period does not belong to the household."""
