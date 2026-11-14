@@ -24,20 +24,8 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-# Local venvs ship PyMySQL instead of mysqlclient; db.database resolves the
-# DBAPI at import time even though these tests never connect.
-try:
-    import MySQLdb  # noqa: F401
-except ModuleNotFoundError:
-    import pymysql
-
-    pymysql.install_as_MySQLdb()
-
-# config.py needs these at import time; engine creation is lazy (no connection).
+# Authentication configuration requires a secret at import time.
 os.environ.setdefault("SECRET_KEY", "x" * 64)
-os.environ.setdefault("DB_PORT", "3306")
-for _k in ("DB_HOST", "DB_USER", "DB_PSWD", "DB_NAME"):
-    os.environ.setdefault(_k, "unused")
 
 from common.services.auth_dependency import get_current_user
 from main import app
