@@ -1,15 +1,28 @@
+"""Lazy construction of the default database session factory."""
+
+import os
+from threading import Lock
+from typing import Any
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from common.config import HOST, PORT, USER, PWD, DB
-from db.orm import metadata
 
-SQLALCHEMY_DATABASE_URL = f"mysql+mysqldb://{USER}:{PWD}@{HOST}:{PORT}/{DB}"
+_lock = Lock()
+_factory = None
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    isolation_level="REPEATABLE READ",
-    pool_pre_ping=True,
-)
 
-DEFAULT_SESSION_FACTORY = sessionmaker(bind=engine, expire_on_commit=False)
+def default_session_factory() -> Any:
+    """Return the process-wide production session factory."""
+    global _factory
+    with _lock:
+        if _factory is None:
+            user = os.getenv("DB_USER")
+            password = os.getenv("DB_PSWD")
+            host = os.getenv("DB_HOST")
+            port = os.getenv("DB_PORT")
+            database = os.getenv("DB_NAME")
+            url = f"mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
+            engine = create_engine(url, isolation_level="REPEATABLE READ", pool_pre_ping=True)
+            _factory = sessionmaker(bind=engine, expire_on_commit=False)
+        return _factory

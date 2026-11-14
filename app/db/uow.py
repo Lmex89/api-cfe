@@ -1,5 +1,7 @@
+from typing import Any
+
 from common.db.abstract_unit_of_work import AbstractUnitOfWork
-from db.database import DEFAULT_SESSION_FACTORY
+from db.database import default_session_factory  # type: ignore[import-not-found]
 from db.repositories.billing_period_repository import BillingPeriodRepository
 from db.repositories.household_repository import HouseholdRepository
 from db.repositories.household_tariff_repository import HouseholdTariffRepository
@@ -19,8 +21,13 @@ from db.repositories.user_repository import UserRepository
 ################################################################################
 class TariffConsumptionUnitofWork(AbstractUnitOfWork):
 
-    def __enter__(self, session_factory=DEFAULT_SESSION_FACTORY):
-        self.session = session_factory(expire_on_commit=False)
+    def __init__(self, session_factory: Any = None) -> None:
+        self.session_factory = session_factory
+
+    def __enter__(self) -> Any:
+        """Acquire a session and bind the repositories."""
+        factory = self.session_factory if self.session_factory is not None else default_session_factory()
+        self.session = factory(expire_on_commit=False)
         self.url_shotner_repository = UrlRepository(self.session)
         self.household_repository = HouseholdRepository(self.session)
         self.household_tariff_repository = HouseholdTariffRepository(self.session)
@@ -34,12 +41,9 @@ class TariffConsumptionUnitofWork(AbstractUnitOfWork):
 
     def __exit__(self, *args):
         super().__exit__(*args)
-        self.session.close()  #(3)
 
     def commit(self):  #(4)
         self.session.commit()
 
     def rollback(self):  #(4)
         self.session.rollback()
-
-

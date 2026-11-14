@@ -331,12 +331,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         len(combos), args.sqlite, args.tariffs, args.months or "all",
     )
 
-    uow = TariffConsumptionUnitofWork()
-    uow.__enter__(session_factory=session_factory)
-    try:
+    with TariffConsumptionUnitofWork(session_factory=session_factory) as uow:
         summary = feed(uow, combos, overwrite=args.overwrite, dry_run=args.dry_run)
-    finally:
-        uow.__exit__(None, None, None)
 
     logger.info(
         "{} summary: created={}, overwritten={}, skipped={}, failed={}",
