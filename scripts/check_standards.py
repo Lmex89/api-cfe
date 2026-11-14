@@ -2,6 +2,7 @@
 
 import difflib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -18,8 +19,17 @@ def run(
     *args: str, input_text: str | None = None, cwd: Path = ROOT
 ) -> subprocess.CompletedProcess[str]:
     """Run a checker and fail closed on tool errors."""
+    env = os.environ.copy()
+    for name in ("MYPYPATH", "PYTHONPATH", "PYTHONHOME"):
+        env.pop(name, None)
     result = subprocess.run(
-        args, cwd=cwd, input=input_text, text=True, capture_output=True, check=False
+        args,
+        cwd=cwd,
+        input=input_text,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
     )
     if result.returncode > 1:
         sys.stderr.write(result.stderr or result.stdout)
@@ -70,6 +80,8 @@ def types(files: list[str]) -> Counter[str]:
         result = run(
             "mypy",
             "--explicit-package-bases",
+            "--platform",
+            "linux",
             "--no-incremental",
             "--no-error-summary",
             "--show-error-codes",

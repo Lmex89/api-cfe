@@ -286,9 +286,10 @@ Use SOLID as design guidance, not a mandate for extra classes:
 
 ### Checks and baseline
 
-From the repository root, after installing the runtime dependencies as above:
+From the repository root, using Python 3.12 (runtime dependencies are optional for these checks):
 
 ```bash
+python3.12 -m venv app/.venv  # if it does not already exist
 app/.venv/bin/python -m pip install -r app/requirements-dev.pip
 source app/.venv/bin/activate
 pre-commit install
@@ -298,9 +299,9 @@ pre-commit run mypy --all-files
 pre-commit run --all-files
 ```
 
-`ruff check` selects E, F, I, Google-convention D, C90 and PLR0913; the complexity limit is 10 and the argument limit is 5. Tests and `__init__.py` are exempt from D rules. Ruff cannot verify that docstrings are English or that a design is SOLID. Mypy uses strict mode with missing imports ignored, so missing type information can escape checking.
+`ruff check` selects E, F, I, Google-convention D, C90 and PLR0913; the complexity limit is 10 and the argument limit is 5. Tests and `__init__.py` are exempt from D rules. Ruff cannot verify that docstrings are English or that a design is SOLID. Mypy uses strict mode and reports missing imports; only existing diagnostics are baselined. Existing unresolved imports still have `Any` types until fixed.
 
-The hooks compare Ruff diagnostics, individual formatting edits and mypy diagnostics against `scripts/standards-baseline.json`. Each diagnostic is identified by its path, rule/message and source line, except D100 (missing module docstring), which is identified by path and rule; formatting edits include their original and formatted text. Occurrence counts prevent an additional identical violation from being hidden. Changes that alter an existing diagnostic or formatting block can require cleaning up that legacy issue. Raw `ruff check`, `ruff format --check`, and `mypy app` report legacy violations as well; use the hooks for baseline-aware results. Mypy checks tracked Python files throughout the repository, plus explicitly selected files, in an isolated copy so untracked files cannot affect imports or diagnostics. During a commit, pre-commit temporarily hides unstaged changes, including unstaged portions of partially staged files. The other hooks check selected Python files. Local hooks require the activated environment and can be bypassed; they are not CI enforcement.
+The hooks compare Ruff diagnostics, individual formatting edits and mypy diagnostics against `scripts/standards-baseline.json`. Each diagnostic is identified by its path, rule/message and source line, except D100 (missing module docstring), which is identified by path and rule; formatting edits include their original and formatted text. Occurrence counts prevent an additional identical violation from being hidden. Changes that alter an existing diagnostic or formatting block can require cleaning up that legacy issue. Raw `ruff check`, `ruff format --check`, and `mypy app` report legacy violations as well; use the hooks for baseline-aware results. Mypy runs in a pre-commit-managed Python 3.12 environment with pinned analysis dependencies in `.pre-commit-config.yaml`, independently of application dependencies and without building mysqlclient. It targets Linux, ignores external Python import paths, and checks tracked Python files throughout the repository plus explicitly selected files in an isolated copy. It runs even on deletion-only commits. During a commit, pre-commit temporarily hides unstaged changes, including unstaged portions of partially staged files. The other hooks check selected Python files and require the activated development environment. Local hooks can be bypassed; they are not CI enforcement.
 
 When fixing legacy issues, remove their entries (or reduce their counts) in `scripts/standards-baseline.json`, then run `pre-commit run --all-files` and the existing unit tests. Do not regenerate or expand the baseline to accommodate new violations. A rename changes the diagnostic path: either fix the legacy violations or move only that file's existing baseline entries to its new path, reviewing the old and new counts and any changed mypy messages. The matching scheme cannot distinguish replacing a legacy violation with an identical one in the same file when the total count stays unchanged; review such moves. Avoid broad formatting or unrelated rewrites.
 
