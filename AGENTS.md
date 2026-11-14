@@ -292,22 +292,17 @@ From the repository root, after installing the runtime dependencies as above:
 app/.venv/bin/python -m pip install -r app/requirements-dev.pip
 source app/.venv/bin/activate
 pre-commit install
-ruff check app
-ruff format --check app
-mypy app
+pre-commit run ruff-check --all-files
+pre-commit run ruff-format --all-files
+pre-commit run mypy --all-files
 pre-commit run --all-files
 ```
 
 `ruff check` selects E, F, I, Google-convention D, C90 and PLR0913; the complexity limit is 10 and the argument limit is 5. Tests and `__init__.py` are exempt from D rules. Ruff cannot verify that docstrings are English or that a design is SOLID. Mypy uses strict mode with missing imports ignored, so missing type information can escape checking.
 
-The baselines in `pyproject.toml` are pragmatic, not changed-line enforcement: Ruff per-file ignores suppress each listed rule throughout that file, including new violations; format exclusions skip whole files; mypy `ignore_errors` suppresses errors throughout listed modules. New unlisted files are checked, but edits in baseline files are not automatically held to the full standard. Hooks run locally only when installed, can be bypassed, and are not enforced by the deploy workflow. Local system hooks need the activated environment on `PATH`; Ruff hooks receive selected Python files while mypy checks `app` as a whole when triggered.
+The hooks compare Ruff diagnostics, individual formatting edits and mypy diagnostics against `scripts/standards-baseline.json`. Each diagnostic is identified by its path, rule/message and source line; formatting edits include their original and formatted text. Occurrence counts prevent an additional identical violation from being hidden. Changes that alter an existing diagnostic or formatting block can require cleaning up that legacy issue. Raw `ruff check`, `ruff format --check`, and `mypy app` report legacy violations as well; use the hooks for baseline-aware results. Mypy checks the entire `app` tree; the other hooks check selected Python files. Local hooks require the activated environment and can be bypassed; they are not CI enforcement.
 
-When touching a baseline file, improve it where practical and shrink exceptions rather than adding new ones:
-
-1. Remove a specific Ruff rule from that file's `per-file-ignores`, run `ruff check path/to/file.py`, and fix all reported violations of that rule. Remove the file entry once empty; leave the test and `__init__.py` D exemptions intact.
-2. For a deferred file, remove its path from `[tool.ruff.format].exclude`, run `ruff format path/to/file.py`, then check the diff and `ruff format --check path/to/file.py`.
-3. Remove the module from the mypy override, run `mypy app`, and fix its reported errors. Module names use the `app.` prefix; check the whole tree because imports can affect results.
-4. Run `pre-commit run --all-files` and the existing unit tests before committing. Avoid broad formatting or unrelated rewrites.
+When fixing legacy issues, remove their entries (or reduce their counts) in `scripts/standards-baseline.json`, then run `pre-commit run --all-files` and the existing unit tests. Do not regenerate or expand the baseline to accommodate new violations. The matching scheme cannot distinguish replacing a legacy violation with an identical one in the same file when the total count stays unchanged; review such moves. Avoid broad formatting or unrelated rewrites.
 
 See [ADR 0004](docs/adr/0004-python-standards.md) for the trade-offs.
 

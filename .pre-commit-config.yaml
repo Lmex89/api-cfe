@@ -3,17 +3,17 @@ repos:
     hooks:
       - id: ruff-check
         name: ruff lint and import order
-        entry: ruff check
+        entry: python scripts/check_standards.py lint
         language: system
         types: [python]
       - id: ruff-format
         name: ruff format check
-        entry: ruff format --check
+        entry: python scripts/check_standards.py format
         language: system
         types: [python]
       - id: mypy
         name: mypy type check
-        entry: mypy app
+        entry: python scripts/check_standards.py types
         language: system
         pass_filenames: false
         types: [python]
