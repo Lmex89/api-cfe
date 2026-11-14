@@ -246,66 +246,9 @@ The system manages the following core domain concepts:
 - **HouseholdTariff** – Association between a household and a tariff over a date range
 - **User** – Authenticated system user (username, email, role, active status)
 
-## Development Conventions
+## Coding Standards
 
-- **Pydantic serializers** live in `model/` with `*_serializers.py` naming for output schemas
-- **Domain models** live in `model/domain/` as plain Python classes (imperatively mapped)
-- **Route handlers** in `routes/` should delegate to services in `services/` or repositories via UoW
-- **Custom exceptions**: Use `EntityNotFoundException` for 420 responses; FastAPI `HTTPException` for standard errors
-- **Logging**: Use Loguru; stdlib logging is intercepted via `InterceptHandler`
-
-## Standards
-
-Write English Google-style docstrings for public modules, classes and functions. Include only applicable sections; explain intent, arguments, return values and errors when useful:
-
-```python
-def example(value: int) -> int:
-    """Summarize the operation in one sentence.
-
-    Args:
-        value: Input to the operation.
-
-    Returns:
-        The resulting value.
-
-    Raises:
-        ValueError: If the input is invalid.
-    """
-    if value < 0:
-        raise ValueError("value must be non-negative")
-    return value
-```
-
-Use SOLID as design guidance, not a mandate for extra classes:
-
-- **Single responsibility:** `CostoTotal` prices consumption; `BillingService` orchestrates consumption, pricing and response construction instead of duplicating pricing.
-- **Open/closed:** `CostoTotal` accepts a tariff catalog; `UowTariffCatalog`, `InMemoryTariffCatalog` and `CachedTariffCatalog` supply or decorate that behavior without changing the calculator.
-- **Liskov substitution:** catalog implementations must preserve the same lookup semantics, including ordering and missing values, so pricing works with either adapter.
-- **Interface segregation:** keep the catalog focused on the lookups pricing needs rather than exposing the entire UoW to the calculator.
-- **Dependency inversion:** the calculator depends on the catalog seam, while `UowTariffCatalog` bridges to UoW repositories; the UoW groups persistence and transaction boundaries. Some services still construct concrete dependencies, so this is a direction, not a claim of universal inversion.
-
-### Checks and baseline
-
-From the repository root, using Python 3.12 (runtime dependencies are optional for these checks):
-
-```bash
-python3.12 -m venv app/.venv  # if it does not already exist
-app/.venv/bin/python -m pip install -r app/requirements-dev.pip
-source app/.venv/bin/activate
-pre-commit install
-pre-commit run ruff-check --all-files
-pre-commit run ruff-format --all-files
-pre-commit run mypy --all-files
-pre-commit run --all-files
-```
-
-`ruff check` selects E, F, I, Google-convention D, C90 and PLR0913; the complexity limit is 10 and the argument limit is 5. Tests and `__init__.py` are exempt from D rules. Ruff cannot verify that docstrings are English or that a design is SOLID. Mypy uses strict mode and reports missing imports; only existing diagnostics are baselined. Existing unresolved imports still have `Any` types until fixed.
-
-The hooks compare Ruff diagnostics, individual formatting edits and mypy diagnostics against `scripts/standards-baseline.json`. Each diagnostic is identified by its path, rule/message and source line, except D100 (missing module docstring), which is identified by path and rule; formatting edits include their original and formatted text. Occurrence counts prevent an additional identical violation from being hidden. Changes that alter an existing diagnostic or formatting block can require cleaning up that legacy issue. Raw `ruff check`, `ruff format --check`, and `mypy app` report legacy violations as well; use the hooks for baseline-aware results. Mypy runs in a pre-commit-managed Python 3.12 environment with pinned analysis dependencies in `.pre-commit-config.yaml`, independently of application dependencies and without building mysqlclient. It targets Linux, ignores external Python import paths, and checks tracked Python files throughout the repository plus explicitly selected files in an isolated copy. It runs even on deletion-only commits. During a commit, pre-commit temporarily hides unstaged changes, including unstaged portions of partially staged files. The other hooks check selected Python files and require the activated development environment. Local hooks can be bypassed; they are not CI enforcement.
-
-When fixing legacy issues, remove their entries (or reduce their counts) in `scripts/standards-baseline.json`, then run `pre-commit run --all-files` and the existing unit tests. Do not regenerate or expand the baseline to accommodate new violations. A rename changes the diagnostic path: either fix the legacy violations or move only that file's existing baseline entries to its new path, reviewing the old and new counts and any changed mypy messages. The matching scheme cannot distinguish replacing a legacy violation with an identical one in the same file when the total count stays unchanged; review such moves. Avoid broad formatting or unrelated rewrites.
-
-See [ADR 0004](docs/adr/0004-python-standards.md) for the trade-offs.
+**Before modifying any Python code or `scripts/standards-baseline.json`, read [`docs/coding-standards.md`](docs/coding-standards.md).** It is the single reference for architecture rules, formatting, docstrings, security/error handling, testing conventions, the Ruff/mypy checks and the baseline procedure. Do not duplicate those rules here.
 
 ## Notable Gotchas
 
