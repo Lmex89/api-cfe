@@ -32,7 +32,9 @@ with TariffConsumptionUnitofWork(factory) as uow:
 with TariffConsumptionUnitofWork(factory) as uow:
     assert uow.tariff_repository.get_by_code('1D') is None
 """
-        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_importer_uses_configured_session_context(self) -> None:
@@ -46,10 +48,13 @@ with tempfile.TemporaryDirectory() as directory:
     path = directory + '/scraped.db'
     with sqlite3.connect(path) as db:
         db.execute('CREATE TABLE tariffs (id INTEGER, code TEXT)')
-        db.execute('CREATE TABLE tiers (tariff_id INTEGER, year INTEGER, month INTEGER, season TEXT, tier_order INTEGER, max_kwh REAL, price_kwh REAL)')
+        db.execute('CREATE TABLE tiers (tariff_id INTEGER, year INTEGER, '
+                   'month INTEGER, season TEXT, tier_order INTEGER, '
+                   'max_kwh REAL, price_kwh REAL)')
     session = MagicMock()
     factory = MagicMock(return_value=session)
-    env = {'DB_HOST': 'localhost', 'DB_PORT': '3306', 'DB_USER': 'u', 'DB_PSWD': 'p', 'DB_NAME': 'db'}
+    env = {'DB_HOST': 'localhost', 'DB_PORT': '3306', 'DB_USER': 'u',
+           'DB_PSWD': 'p', 'DB_NAME': 'db'}
     with patch.dict(os.environ, env, clear=True), \\
          patch('sqlalchemy.create_engine'), \\
          patch('sqlalchemy.orm.sessionmaker', return_value=factory):
@@ -57,7 +62,9 @@ with tempfile.TemporaryDirectory() as directory:
     assert session.close.called
     assert not session.commit.called
 """
-        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_authenticated_startup_validates_secret(self) -> None:
@@ -69,7 +76,9 @@ with tempfile.TemporaryDirectory() as directory:
                     env["SECRET_KEY"] = secret
                 result = subprocess.run(
                     [sys.executable, "-c", "import main; assert main.app"],
-                    env=env, capture_output=True, text=True,
+                    env=env,
+                    capture_output=True,
+                    text=True,
                 )
                 self.assertEqual(result.returncode == 0, expected, result.stderr)
                 if not expected:
@@ -114,20 +123,29 @@ with patch('db.database.create_engine', return_value=engine) as create, \\
     with TariffConsumptionUnitofWork() as second:
         assert second.session is sessions[1]
     assert create.call_count == maker.call_count == 1
-    assert create.call_args.kwargs == {'isolation_level': 'REPEATABLE READ', 'pool_pre_ping': True}
+    assert create.call_args.kwargs == {
+        'isolation_level': 'REPEATABLE READ', 'pool_pre_ping': True}
     assert maker.call_args.kwargs == {'bind': engine, 'expire_on_commit': False}
     assert all(s.close.called for s in sessions)
     assert all(not s.commit.called for s in sessions)
 """
-        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_import_without_authentication_or_engine(self) -> None:
-        env = {k: v for k, v in os.environ.items() if k not in {
-            "SECRET_KEY", "DB_HOST", "DB_PORT", "DB_USER", "DB_PSWD", "DB_NAME"
-        }}
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k
+            not in {"SECRET_KEY", "DB_HOST", "DB_PORT", "DB_USER", "DB_PSWD", "DB_NAME"}
+        }
         result = subprocess.run(
-            [sys.executable, "-c", """
+            [
+                sys.executable,
+                "-c",
+                """
 import sys
 import sqlalchemy
 def forbidden(*args, **kwargs):
@@ -137,7 +155,10 @@ import db.uow
 assert 'common.config' not in sys.modules
 assert 'common.logging' not in sys.modules
 assert 'MySQLdb' not in sys.modules
-"""],
-            env=env, capture_output=True, text=True,
+""",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)

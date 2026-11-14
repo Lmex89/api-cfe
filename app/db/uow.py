@@ -13,7 +13,6 @@ from db.repositories.url_repository import UrlRepository
 from db.repositories.user_repository import UserRepository
 
 
-
 ################################################################################
 ### Esta clase funciona como un agregado (agreggate) que se encarga de 
 ### manejar un conjunto de repositorios. Siempre se debe de acceder a los
@@ -22,11 +21,16 @@ from db.repositories.user_repository import UserRepository
 class TariffConsumptionUnitofWork(AbstractUnitOfWork):
 
     def __init__(self, session_factory: Any = None) -> None:
+        """Configure an optional session factory before entering the context."""
         self.session_factory = session_factory
 
     def __enter__(self) -> Any:
         """Acquire a session and bind the repositories."""
-        factory = self.session_factory if self.session_factory is not None else default_session_factory()
+        factory = (
+            self.session_factory
+            if self.session_factory is not None
+            else default_session_factory()
+        )
         self.session = factory(expire_on_commit=False)
         self.url_shotner_repository = UrlRepository(self.session)
         self.household_repository = HouseholdRepository(self.session)

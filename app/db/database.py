@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-
 _lock = Lock()
 _factory = None
 
@@ -23,6 +22,8 @@ def default_session_factory() -> Any:
             port = os.getenv("DB_PORT")
             database = os.getenv("DB_NAME")
             url = f"mysql+mysqldb://{user}:{password}@{host}:{port}/{database}"
-            engine = create_engine(url, isolation_level="REPEATABLE READ", pool_pre_ping=True)
+            engine = create_engine(
+                url, isolation_level="REPEATABLE READ", pool_pre_ping=True
+            )
             _factory = sessionmaker(bind=engine, expire_on_commit=False)
         return _factory
