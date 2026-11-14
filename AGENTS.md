@@ -254,6 +254,63 @@ The system manages the following core domain concepts:
 - **Custom exceptions**: Use `EntityNotFoundException` for 420 responses; FastAPI `HTTPException` for standard errors
 - **Logging**: Use Loguru; stdlib logging is intercepted via `InterceptHandler`
 
+## Standards
+
+Write English Google-style docstrings for public modules, classes and functions. Include only applicable sections; explain intent, arguments, return values and errors when useful:
+
+```python
+def example(value: int) -> int:
+    """Summarize the operation in one sentence.
+
+    Args:
+        value: Input to the operation.
+
+    Returns:
+        The resulting value.
+
+    Raises:
+        ValueError: If the input is invalid.
+    """
+    if value < 0:
+        raise ValueError("value must be non-negative")
+    return value
+```
+
+Use SOLID as design guidance, not a mandate for extra classes:
+
+- **Single responsibility:** `CostoTotal` prices consumption; `BillingService` orchestrates consumption, pricing and response construction instead of duplicating pricing.
+- **Open/closed:** `CostoTotal` accepts a tariff catalog; `UowTariffCatalog`, `InMemoryTariffCatalog` and `CachedTariffCatalog` supply or decorate that behavior without changing the calculator.
+- **Liskov substitution:** catalog implementations must preserve the same lookup semantics, including ordering and missing values, so pricing works with either adapter.
+- **Interface segregation:** keep the catalog focused on the lookups pricing needs rather than exposing the entire UoW to the calculator.
+- **Dependency inversion:** the calculator depends on the catalog seam, while `UowTariffCatalog` bridges to UoW repositories; the UoW groups persistence and transaction boundaries. Some services still construct concrete dependencies, so this is a direction, not a claim of universal inversion.
+
+### Checks and baseline
+
+From the repository root, after installing the runtime dependencies as above:
+
+```bash
+app/.venv/bin/python -m pip install -r app/requirements-dev.pip
+source app/.venv/bin/activate
+pre-commit install
+ruff check app
+ruff format --check app
+mypy app
+pre-commit run --all-files
+```
+
+`ruff check` selects E, F, I, Google-convention D, C90 and PLR0913; the complexity limit is 10 and the argument limit is 5. Tests and `__init__.py` are exempt from D rules. Ruff cannot verify that docstrings are English or that a design is SOLID. Mypy uses strict mode with missing imports ignored, so missing type information can escape checking.
+
+The baselines in `pyproject.toml` are pragmatic, not changed-line enforcement: Ruff per-file ignores suppress each listed rule throughout that file, including new violations; format exclusions skip whole files; mypy `ignore_errors` suppresses errors throughout listed modules. New unlisted files are checked, but edits in baseline files are not automatically held to the full standard. Hooks run locally only when installed, can be bypassed, and are not enforced by the deploy workflow. Local system hooks need the activated environment on `PATH`; Ruff hooks receive selected Python files while mypy checks `app` as a whole when triggered.
+
+When touching a baseline file, improve it where practical and shrink exceptions rather than adding new ones:
+
+1. Remove a specific Ruff rule from that file's `per-file-ignores`, run `ruff check path/to/file.py`, and fix all reported violations of that rule. Remove the file entry once empty; leave the test and `__init__.py` D exemptions intact.
+2. For a deferred file, remove its path from `[tool.ruff.format].exclude`, run `ruff format path/to/file.py`, then check the diff and `ruff format --check path/to/file.py`.
+3. Remove the module from the mypy override, run `mypy app`, and fix its reported errors. Module names use the `app.` prefix; check the whole tree because imports can affect results.
+4. Run `pre-commit run --all-files` and the existing unit tests before committing. Avoid broad formatting or unrelated rewrites.
+
+See [ADR 0004](docs/adr/0004-python-standards.md) for the trade-offs.
+
 ## Notable Gotchas
 
 - `bcrypt==4.0.1` is pinned because newer versions are incompatible with `passlib 1.7.4`
@@ -309,6 +366,7 @@ The system manages the following core domain concepts:
 
 - Stdlib `unittest` (no pytest), tests in `app/tests/`. No MySQL needed.
 - Run: `cd app && .venv/bin/python -m unittest discover -s tests -v`
+- The scraper-feed tests also read `scrapper/data/cfe_tarifas.db` from the CFE monorepo layout; a standalone worktree without that relative path will fail those tests.
 - Files:
   - `fakes.py` — shared `FakeRepository`, `FakeUoW`, `make_client` (not a test module).
   - Calculator/scripts: `test_costo_total.py`, `test_costo_total_pricing.py`, `test_costo_total_characterization.py`, `test_dashboard_history_costs.py`, `test_history_rows.py`, `test_history_single_load.py`, `test_period_rules.py`, `test_feed_tariffs_from_scrapper.py`.
