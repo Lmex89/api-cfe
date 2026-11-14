@@ -15,5 +15,5 @@ repos:
         name: mypy type check
         entry: python scripts/check_standards.py types
         language: system
-        pass_filenames: false
+        require_serial: true
         types: [python]
